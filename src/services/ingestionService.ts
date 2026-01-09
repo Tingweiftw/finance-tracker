@@ -13,7 +13,6 @@ interface ImportResult {
  */
 export async function importCSV(
     file: File,
-    ownerId: string,
     account: Account,
     existingHashes: Set<string>
 ): Promise<ImportResult> {
@@ -38,7 +37,6 @@ export async function importCSV(
             row.date,
             row.description,
             row.amount,
-            ownerId,
             account.id,
             account.type
         );

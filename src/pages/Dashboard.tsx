@@ -1,12 +1,11 @@
 import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { BigExpenseList, ImportStatusCard } from '@/components';
-import type { Owner, Account, Transaction, Snapshot } from '@/models';
+import type { Account, Transaction, Snapshot } from '@/models';
 import { formatCurrency, isWithinDays, getCurrentMonth } from '@/utils/date';
 import { calculateThreshold, getBigExpenses, calculateMonthlyIncome } from '@/utils/thresholds';
 
 interface DashboardProps {
-    owners: Owner[];
     accounts: Account[];
     transactions: Transaction[];
     snapshots: Snapshot[];
@@ -14,7 +13,6 @@ interface DashboardProps {
 }
 
 export function Dashboard({
-    owners,
     accounts,
     transactions,
     snapshots,
@@ -62,10 +60,7 @@ export function Dashboard({
                 <div className="page-header">
                     <h1 className="page-title">Dashboard</h1>
                     <p className="page-subtitle">
-                        {owners.length > 0
-                            ? `${owners.map((o) => o.name).join(' & ')}'s finances`
-                            : 'Your financial overview'
-                        }
+                        Your financial overview
                     </p>
                 </div>
 

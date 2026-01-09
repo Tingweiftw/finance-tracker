@@ -134,7 +134,6 @@ export function processTransaction(
     date: string,
     description: string,
     amount: number,
-    ownerId: string,
     accountId: string,
     sourceAccountType?: string
 ): Transaction {
@@ -144,7 +143,6 @@ export function processTransaction(
     return {
         id,
         date,
-        ownerId,
         accountId,
         type,
         category,

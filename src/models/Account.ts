@@ -2,11 +2,23 @@ export type AccountType = 'bank' | 'hysa' | 'credit' | 'brokerage' | 'retirement
 
 export interface Account {
     id: string;
-    ownerId: string;
+    productId?: string;
     institution: string;
     name: string;
     type: AccountType;
 }
+
+export interface AccountProduct {
+    id: string;
+    institution: string;
+    name: string;
+    type: AccountType;
+}
+
+export const UOB_PRODUCTS: AccountProduct[] = [
+    { id: 'uob-one-fx', institution: 'UOB', name: 'UOB One (with FX+)', type: 'bank' },
+    { id: 'uob-ladys', institution: 'UOB', name: 'UOB Lady\'s Savings', type: 'bank' },
+];
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
     bank: 'Bank Account',

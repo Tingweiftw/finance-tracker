@@ -3,7 +3,6 @@ export type TransactionType = 'expense' | 'income' | 'investment' | 'transfer';
 export interface Transaction {
     id: string;
     date: string;
-    ownerId: string;
     accountId: string;
     type: TransactionType;
     category: string;

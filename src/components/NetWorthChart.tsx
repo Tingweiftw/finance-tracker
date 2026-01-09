@@ -9,13 +9,11 @@ import {
     ResponsiveContainer,
     Legend,
 } from 'recharts';
-import type { Snapshot, Owner } from '@/models';
+import type { Snapshot } from '@/models';
 import { formatCurrency, formatMonthYear } from '@/utils/date';
 
 interface NetWorthChartProps {
     snapshots: Snapshot[];
-    owners: Owner[];
-    selectedOwnerId?: string | null;
 }
 
 interface ChartDataPoint {
@@ -23,22 +21,17 @@ interface ChartDataPoint {
     [key: string]: number | string;
 }
 
-// Colors for different owners - WARM palette
-const OWNER_COLORS = ['#f59e0b', '#10b981', '#f97316', '#a3e635'];
 
 /**
  * Net worth line chart showing balance trends over time
  */
-export function NetWorthChart({ snapshots, owners, selectedOwnerId }: NetWorthChartProps) {
+export function NetWorthChart({ snapshots }: NetWorthChartProps) {
     // Process snapshots into chart data
     const chartData = useMemo(() => {
         // Group snapshots by date
         const dateMap = new Map<string, ChartDataPoint>();
 
-        // Filter snapshots by owner if selected
-        const filteredSnapshots = selectedOwnerId
-            ? snapshots.filter((s) => s.ownerId === selectedOwnerId)
-            : snapshots;
+        const filteredSnapshots = snapshots;
 
         for (const snapshot of filteredSnapshots) {
             // Use month as the date key for grouping
@@ -50,37 +43,18 @@ export function NetWorthChart({ snapshots, owners, selectedOwnerId }: NetWorthCh
 
             const point = dateMap.get(monthKey)!;
 
-            // Add to owner's total
-            const ownerKey = snapshot.ownerId;
-            point[ownerKey] = ((point[ownerKey] as number) || 0) + snapshot.balance;
-
-            // Add to combined total
-            point['combined'] = ((point['combined'] as number) || 0) + snapshot.balance;
+            // Add to total
+            point['total'] = ((point['total'] as number) || 0) + snapshot.balance;
         }
 
         // Sort by date and convert to array
         return Array.from(dateMap.values()).sort((a, b) =>
             a.date.localeCompare(b.date)
         );
-    }, [snapshots, selectedOwnerId]);
+    }, [snapshots]);
 
     // Determine which lines to show
-    const linesToShow = useMemo(() => {
-        if (selectedOwnerId) {
-            const owner = owners.find((o) => o.id === selectedOwnerId);
-            return [{ id: selectedOwnerId, name: owner?.name || 'Selected', color: OWNER_COLORS[0] }];
-        }
-
-        // Show combined + all owners
-        return [
-            { id: 'combined', name: 'Combined', color: '#ffffff' },
-            ...owners.map((owner, i) => ({
-                id: owner.id,
-                name: owner.name,
-                color: OWNER_COLORS[i % OWNER_COLORS.length],
-            })),
-        ];
-    }, [owners, selectedOwnerId]);
+    const linesToShow = [{ id: 'total', name: 'Net Worth', color: '#ffffff' }];
 
     if (chartData.length === 0) {
         return (
@@ -141,7 +115,7 @@ export function NetWorthChart({ snapshots, owners, selectedOwnerId }: NetWorthCh
                             dataKey={line.id}
                             name={line.name}
                             stroke={line.color}
-                            strokeWidth={line.id === 'combined' ? 3 : 2}
+                            strokeWidth={3}
                             dot={false}
                             activeDot={{ r: 6 }}
                         />

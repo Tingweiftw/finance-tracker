@@ -74,7 +74,6 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                 row.date,
                 row.description,
                 row.amount,
-                state.selectedAccount.ownerId,
                 state.selectedAccount.id,
                 state.selectedAccount.type
             );

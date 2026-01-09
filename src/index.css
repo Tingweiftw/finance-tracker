@@ -439,6 +439,41 @@ textarea {
   text-align: right;
 }
 
+/* ===== Mobile Header with Settings Gear ===== */
+.mobile-header {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 var(--space-md);
+  z-index: 100;
+  pointer-events: none;
+}
+
+.settings-gear {
+  pointer-events: auto;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: var(--color-text-secondary);
+  background: var(--color-bg-card);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-md);
+  transition: all var(--transition-fast);
+}
+
+.settings-gear:hover {
+  color: var(--color-accent-primary);
+  transform: rotate(45deg);
+}
+
 /* ===== Bottom Navigation (Mobile) ===== */
 .bottom-nav {
   position: fixed;
@@ -450,8 +485,8 @@ textarea {
   border-top: 1px solid var(--color-bg-hover);
   display: flex;
   align-items: center;
-  justify-content: space-around;
-  padding: 0 var(--space-md);
+  justify-content: space-evenly;
+  padding: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
 }
@@ -460,11 +495,18 @@ textarea {
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center;
   gap: 2px;
-  padding: var(--space-xs) var(--space-sm);
+  flex: 1;
+  height: 100%;
   color: var(--color-text-muted);
   font-size: var(--font-size-xs);
   transition: color var(--transition-fast);
+}
+
+/* Hide settings in bottom nav on mobile */
+.nav-item-settings {
+  display: none;
 }
 
 .nav-item:hover,
@@ -749,11 +791,18 @@ textarea {
   .nav-item {
     flex-direction: row;
     justify-content: flex-start;
+    flex: none;
+    height: auto;
     width: 100%;
     padding: var(--space-md);
     border-radius: var(--radius-md);
     font-size: var(--font-size-sm);
     gap: var(--space-md);
+  }
+
+  /* Show settings in sidebar on desktop */
+  .nav-item-settings {
+    display: flex;
   }
 
   .nav-item.active {
@@ -762,6 +811,11 @@ textarea {
 
   .nav-item-icon {
     font-size: 20px;
+  }
+
+  /* Hide mobile header on desktop */
+  .mobile-header {
+    display: none;
   }
 
   /* Adjust page layout */

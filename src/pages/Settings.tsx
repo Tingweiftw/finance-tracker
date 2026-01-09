@@ -2,9 +2,10 @@ import { useState } from 'react';
 import {
     ACCOUNT_TYPE_LABELS,
     ACCOUNT_TYPE_ICONS,
-    type Owner,
     type Account,
-    type AccountType
+    type AccountType,
+    type AccountProduct,
+    UOB_PRODUCTS
 } from '@/models';
 import {
     requestNotificationPermission,
@@ -13,57 +14,96 @@ import {
 } from '@/services';
 
 interface SettingsPageProps {
-    owners: Owner[];
     accounts: Account[];
-    onAddOwner: (owner: Owner) => void;
     onAddAccount: (account: Account) => void;
 }
 
-export function Settings({ owners, accounts, onAddOwner, onAddAccount }: SettingsPageProps) {
-    const [showAddOwner, setShowAddOwner] = useState(false);
+const SG_BANKS = [
+    'DBS',
+    'POSB',
+    'OCBC',
+    'UOB',
+    'Standard Chartered',
+    'HSBC',
+    'Citibank',
+    'Trust Bank',
+    'MariBank',
+    'GXS Bank',
+];
+
+const BROKERAGE_INSTITUTIONS = [
+    'Syfe',
+    'StashAway',
+    'Endowus',
+    'Interactive Brokers',
+    'Tiger Brokers',
+    'Moomoo',
+    'Vanguard',
+    'Charles Schwab',
+];
+
+const CREDIT_CARD_ISSUERS = [
+    'DBS',
+    'OCBC',
+    'UOB',
+    'American Express',
+    'HSBC',
+    'Standard Chartered',
+    'Citibank',
+];
+
+const RETIREMENT_PROVIDERS = [
+    'CPF',
+    'SRS (DBS)',
+    'SRS (OCBC)',
+    'SRS (UOB)',
+];
+
+
+export function Settings({ accounts, onAddAccount }: SettingsPageProps) {
     const [showAddAccount, setShowAddAccount] = useState(false);
-    const [ownerName, setOwnerName] = useState('');
+    const [error, setError] = useState<string | null>(null);
     const [accountForm, setAccountForm] = useState({
-        ownerId: '',
         institution: '',
         name: '',
         type: 'bank' as AccountType,
+        productId: '',
     });
 
     const notificationPermission = getNotificationPermission();
     const sheetsConfigured = isSheetsConfigured();
 
-    const handleAddOwner = () => {
-        if (!ownerName.trim()) return;
-
-        const owner: Owner = {
-            id: `owner-${Date.now()}`,
-            name: ownerName.trim(),
-        };
-
-        onAddOwner(owner);
-        setOwnerName('');
-        setShowAddOwner(false);
-    };
-
     const handleAddAccount = () => {
-        if (!accountForm.ownerId || !accountForm.institution || !accountForm.name) return;
+        if (!accountForm.institution || !accountForm.name) return;
+
+        // Check for duplicates
+        const isDuplicate = accounts.some(
+            (acc) =>
+                acc.institution.toLowerCase() === accountForm.institution.toLowerCase() &&
+                acc.name.toLowerCase() === accountForm.name.toLowerCase()
+        );
+
+        if (isDuplicate) {
+            setError('This account already exists.');
+            return;
+        }
 
         const account: Account = {
             id: `account-${Date.now()}`,
-            ownerId: accountForm.ownerId,
-            institution: accountForm.institution.trim(),
-            name: accountForm.name.trim(),
+            productId: accountForm.productId || undefined,
+            institution: accountForm.institution,
+            name: accountForm.name,
             type: accountForm.type,
         };
 
         onAddAccount(account);
         setAccountForm({
-            ownerId: '',
             institution: '',
             name: '',
             type: 'bank',
+            productId: '',
         });
+        setError(null);
         setShowAddAccount(false);
     };
 
@@ -108,79 +148,16 @@ export function Settings({ owners, accounts, onAddOwner, onAddAccount }: Setting
                     </div>
                 </section>
 
-                {/* Owners */}
-                <section className="section">
-                    <div className="section-header">
-                        <h2 className="section-title">Owners</h2>
-                        <button
-                            className="btn btn-ghost"
-                            onClick={() => setShowAddOwner(true)}
-                        >
-                            + Add
-                        </button>
-                    </div>
-
-                    {owners.length === 0 ? (
-                        <div className="card">
-                            <div className="empty-state" style={{ padding: 'var(--space-lg)' }}>
-                                <div className="empty-state-icon">👤</div>
-                                <div className="empty-state-title">No owners yet</div>
-                                <div className="empty-state-text">Add yourself and your partner</div>
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="list">
-                            {owners.map((owner) => (
-                                <div key={owner.id} className="list-item">
-                                    <div className="list-item-icon">👤</div>
-                                    <div className="list-item-content">
-                                        <div className="list-item-title">{owner.name}</div>
-                                        <div className="list-item-subtitle">
-                                            {accounts.filter((a) => a.ownerId === owner.id).length} accounts
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Add Owner Form */}
-                    {showAddOwner && (
-                        <div className="card mt-md">
-                            <input
-                                type="text"
-                                className="input mb-md"
-                                placeholder="Owner name"
-                                value={ownerName}
-                                onChange={(e) => setOwnerName(e.target.value)}
-                                autoFocus
-                            />
-                            <div className="flex gap-md">
-                                <button
-                                    className="btn btn-secondary flex-1"
-                                    onClick={() => setShowAddOwner(false)}
-                                >
-                                    Cancel
-                                </button>
-                                <button
-                                    className="btn btn-primary flex-1"
-                                    onClick={handleAddOwner}
-                                >
-                                    Add Owner
-                                </button>
-                            </div>
-                        </div>
-                    )}
-                </section>
-
                 {/* Accounts */}
                 <section className="section">
                     <div className="section-header">
                         <h2 className="section-title">Accounts</h2>
                         <button
                             className="btn btn-ghost"
-                            onClick={() => setShowAddAccount(true)}
-                            disabled={owners.length === 0}
+                            onClick={() => {
+                                setError(null);
+                                setShowAddAccount(true);
+                            }}
                         >
                             + Add
                         </button>
@@ -192,10 +169,7 @@ export function Settings({ owners, accounts, onAddOwner, onAddAccount }: Setting
                                 <div className="empty-state-icon">🏦</div>
                                 <div className="empty-state-title">No accounts yet</div>
                                 <div className="empty-state-text">
-                                    {owners.length === 0
-                                        ? 'Add an owner first'
-                                        : 'Add your bank accounts, credit cards, etc.'
-                                    }
+                                    Add your bank accounts, credit cards, etc.
                                 </div>
                             </div>
                         </div>
@@ -209,7 +183,7 @@ export function Settings({ owners, accounts, onAddOwner, onAddAccount }: Setting
                                     <div className="list-item-content">
                                         <div className="list-item-title">{account.name}</div>
                                         <div className="list-item-subtitle">
-                                            {account.institution} • {owners.find((o) => o.id === account.ownerId)?.name}
+                                            {account.institution}
                                         </div>
                                     </div>
                                 </div>
@@ -220,44 +194,138 @@ export function Settings({ owners, accounts, onAddOwner, onAddAccount }: Setting
                     {/* Add Account Form */}
                     {showAddAccount && (
                         <div className="card mt-md">
-                            <select
-                                className="input mb-md"
-                                value={accountForm.ownerId}
-                                onChange={(e) => setAccountForm((prev) => ({ ...prev, ownerId: e.target.value }))}
-                            >
-                                <option value="">Select owner</option>
-                                {owners.map((owner) => (
-                                    <option key={owner.id} value={owner.id}>{owner.name}</option>
-                                ))}
-                            </select>
-
-                            <input
-                                type="text"
-                                className="input mb-md"
-                                placeholder="Institution (e.g., DBS, OCBC)"
-                                value={accountForm.institution}
-                                onChange={(e) => setAccountForm((prev) => ({ ...prev, institution: e.target.value }))}
-                            />
-
-                            <input
-                                type="text"
-                                className="input mb-md"
-                                placeholder="Account name"
-                                value={accountForm.name}
-                                onChange={(e) => setAccountForm((prev) => ({ ...prev, name: e.target.value }))}
-                            />
-
+                            {/* 1. Account Type */}
                             <select
                                 className="input mb-md"
                                 value={accountForm.type}
-                                onChange={(e) => setAccountForm((prev) => ({ ...prev, type: e.target.value as AccountType }))}
+                                onChange={(e) => {
+                                    const newType = e.target.value as AccountType;
+                                    setAccountForm({
+                                        type: newType,
+                                        institution: '',
+                                        name: '',
+                                        productId: '',
+                                    });
+                                    setError(null);
+                                }}
                             >
+                                <option value="" disabled>Select Account Type</option>
                                 {Object.entries(ACCOUNT_TYPE_LABELS).map(([value, label]) => (
                                     <option key={value} value={value}>
                                         {ACCOUNT_TYPE_ICONS[value as AccountType]} {label}
                                     </option>
                                 ))}
                             </select>
+
+                            {/* 2. Institution Field - Filtered by Type */}
+                            {accountForm.type && (
+                                <>
+                                    <select
+                                        className="input mb-md"
+                                        value={(() => {
+                                            const currentList =
+                                                ['bank', 'hysa'].includes(accountForm.type) ? SG_BANKS :
+                                                    accountForm.type === 'credit' ? CREDIT_CARD_ISSUERS :
+                                                        accountForm.type === 'brokerage' ? BROKERAGE_INSTITUTIONS :
+                                                            accountForm.type === 'retirement' ? RETIREMENT_PROVIDERS : [];
+
+                                            return currentList.includes(accountForm.institution) ? accountForm.institution : accountForm.institution === '' ? '' : 'Other';
+                                        })()}
+                                        onChange={(e) => {
+                                            const val = e.target.value;
+                                            setAccountForm(prev => ({
+                                                ...prev,
+                                                institution: val === 'Other' ? '' : val,
+                                                productId: '',
+                                                name: val === 'UOB' ? '' : (val === 'Other' ? '' : prev.name)
+                                            }));
+                                            setError(null);
+                                        }}
+                                    >
+                                        <option value="" disabled>Select Institution</option>
+                                        {(() => {
+                                            const currentList =
+                                                ['bank', 'hysa'].includes(accountForm.type) ? SG_BANKS :
+                                                    accountForm.type === 'credit' ? CREDIT_CARD_ISSUERS :
+                                                        accountForm.type === 'brokerage' ? BROKERAGE_INSTITUTIONS :
+                                                            accountForm.type === 'retirement' ? RETIREMENT_PROVIDERS : [];
+
+                                            return currentList.map((inst) => (
+                                                <option key={inst} value={inst}>{inst}</option>
+                                            ));
+                                        })()}
+                                        <option value="Other">Other...</option>
+                                    </select>
+
+                                    {/* Manual entry for "Other" or custom input */}
+                                    {(!(() => {
+                                        const currentList =
+                                            ['bank', 'hysa'].includes(accountForm.type) ? SG_BANKS :
+                                                accountForm.type === 'credit' ? CREDIT_CARD_ISSUERS :
+                                                    accountForm.type === 'brokerage' ? BROKERAGE_INSTITUTIONS :
+                                                        accountForm.type === 'retirement' ? RETIREMENT_PROVIDERS : [];
+                                        return currentList.includes(accountForm.institution);
+                                    })() || accountForm.institution === '') && (
+                                            <input
+                                                type="text"
+                                                className="input mb-md"
+                                                placeholder="Enter institution name"
+                                                value={accountForm.institution}
+                                                onChange={(e) => {
+                                                    setAccountForm((prev) => ({ ...prev, institution: e.target.value }));
+                                                    setError(null);
+                                                }}
+                                                autoFocus
+                                            />
+                                        )}
+                                </>
+                            )}
+
+                            {/* 3. Name Field - Conditional UOB Logic */}
+                            {accountForm.institution && (
+                                accountForm.institution === 'UOB' ? (
+                                    <select
+                                        className="input mb-md"
+                                        value={accountForm.productId}
+                                        onChange={(e) => {
+                                            const product = UOB_PRODUCTS.find(p => p.id === e.target.value);
+                                            if (product) {
+                                                setAccountForm(prev => ({
+                                                    ...prev,
+                                                    productId: product.id,
+                                                    name: product.name,
+                                                    type: product.type // UOB products have fixed types
+                                                }));
+                                            }
+                                            setError(null);
+                                        }}
+                                    >
+                                        <option value="" disabled>Select Product</option>
+                                        {UOB_PRODUCTS.map((product: AccountProduct) => (
+                                            <option key={product.id} value={product.id}>
+                                                {product.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                ) : (
+                                    <input
+                                        type="text"
+                                        className="input mb-md"
+                                        placeholder="Account name (e.g., Savings, My Portfolio)"
+                                        value={accountForm.name}
+                                        onChange={(e) => {
+                                            setAccountForm((prev) => ({ ...prev, name: e.target.value }));
+                                            setError(null);
+                                        }}
+                                    />
+                                )
+                            )}
+
+                            {error && (
+                                <div className="text-expense text-sm mb-md flex items-center gap-sm">
+                                    <span>⚠️</span> {error}
+                                </div>
+                            )}
 
                             <div className="flex gap-md">
                                 <button

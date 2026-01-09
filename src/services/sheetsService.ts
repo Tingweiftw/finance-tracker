@@ -2,7 +2,7 @@
  * Google Sheets service for data persistence
  * 
  * This implementation uses a simple approach:
- * 1. Data is stored in separate sheets: Owners, Accounts, Transactions, Snapshots
+ * 1. Data is stored in separate sheets: Accounts, Transactions, Snapshots
  * 2. Each sheet has headers in the first row
  * 3. Append-only pattern for transactions
  * 
@@ -13,14 +13,13 @@
  * 4. Share your spreadsheet with the service account (if using service account)
  */
 
-import type { Owner, Account, Transaction, Snapshot } from '@/models';
+import type { Account, Transaction, Snapshot } from '@/models';
 
 // Configuration - replace with your values
 const SHEETS_CONFIG = {
     apiKey: import.meta.env.VITE_GOOGLE_SHEETS_API_KEY || '',
     spreadsheetId: import.meta.env.VITE_GOOGLE_SPREADSHEET_ID || '',
     sheets: {
-        owners: 'Owners',
         accounts: 'Accounts',
         transactions: 'Transactions',
         snapshots: 'Snapshots',
@@ -95,29 +94,13 @@ async function appendRows(sheetName: string, values: (string | number)[][]): Pro
     }
 }
 
-// ===== Owners =====
-
-const parseOwnerRow = (row: string[]): Owner => ({
-    id: row[0],
-    name: row[1],
-});
-
-export async function getOwners(): Promise<Owner[]> {
-    return readRange(SHEETS_CONFIG.sheets.owners, parseOwnerRow);
-}
-
-export async function addOwner(owner: Owner): Promise<boolean> {
-    return appendRows(SHEETS_CONFIG.sheets.owners, [[owner.id, owner.name]]);
-}
-
 // ===== Accounts =====
 
 const parseAccountRow = (row: string[]): Account => ({
     id: row[0],
-    ownerId: row[1],
-    institution: row[2],
-    name: row[3],
-    type: row[4] as Account['type'],
+    institution: row[1],
+    name: row[2],
+    type: row[3] as Account['type'],
 });
 
 export async function getAccounts(): Promise<Account[]> {
@@ -126,7 +109,7 @@ export async function getAccounts(): Promise<Account[]> {
 
 export async function addAccount(account: Account): Promise<boolean> {
     return appendRows(SHEETS_CONFIG.sheets.accounts, [
-        [account.id, account.ownerId, account.institution, account.name, account.type],
+        [account.id, account.institution, account.name, account.type],
     ]);
 }
 
@@ -135,13 +118,12 @@ export async function addAccount(account: Account): Promise<boolean> {
 const parseTransactionRow = (row: string[]): Transaction => ({
     id: row[0],
     date: row[1],
-    ownerId: row[2],
-    accountId: row[3],
-    type: row[4] as Transaction['type'],
-    category: row[5],
-    amount: parseFloat(row[6]),
-    description: row[7],
-    tag: row[8] || undefined,
+    accountId: row[2],
+    type: row[3] as Transaction['type'],
+    category: row[4],
+    amount: parseFloat(row[5]),
+    description: row[6],
+    tag: row[7] || undefined,
 });
 
 export async function getTransactions(): Promise<Transaction[]> {
@@ -152,7 +134,6 @@ export async function addTransactions(transactions: Transaction[]): Promise<bool
     const values = transactions.map((t) => [
         t.id,
         t.date,
-        t.ownerId,
         t.accountId,
         t.type,
         t.category,
@@ -167,9 +148,8 @@ export async function addTransactions(transactions: Transaction[]): Promise<bool
 
 const parseSnapshotRow = (row: string[]): Snapshot => ({
     date: row[0],
-    ownerId: row[1],
-    accountId: row[2],
-    balance: parseFloat(row[3]),
+    accountId: row[1],
+    balance: parseFloat(row[2]),
 });
 
 export async function getSnapshots(): Promise<Snapshot[]> {
@@ -178,7 +158,7 @@ export async function getSnapshots(): Promise<Snapshot[]> {
 
 export async function addSnapshot(snapshot: Snapshot): Promise<boolean> {
     return appendRows(SHEETS_CONFIG.sheets.snapshots, [
-        [snapshot.date, snapshot.ownerId, snapshot.accountId, snapshot.balance],
+        [snapshot.date, snapshot.accountId, snapshot.balance],
     ]);
 }
 

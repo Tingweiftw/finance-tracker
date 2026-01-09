@@ -1,14 +1,11 @@
-import { useState } from 'react';
 import { NetWorthChart } from '@/components';
-import type { Owner, Snapshot } from '@/models';
+import type { Snapshot } from '@/models';
 
 interface NetWorthPageProps {
-    owners: Owner[];
     snapshots: Snapshot[];
 }
 
-export function NetWorth({ owners, snapshots }: NetWorthPageProps) {
-    const [selectedOwnerId, setSelectedOwnerId] = useState<string | null>(null);
+export function NetWorth({ snapshots }: NetWorthPageProps) {
 
     return (
         <div className="page">
@@ -18,32 +15,10 @@ export function NetWorth({ owners, snapshots }: NetWorthPageProps) {
                     <p className="page-subtitle">Track your wealth over time</p>
                 </div>
 
-                {/* Owner filter */}
-                {owners.length > 1 && (
-                    <div className="flex gap-sm mb-lg" style={{ overflowX: 'auto' }}>
-                        <button
-                            className={`btn ${selectedOwnerId === null ? 'btn-primary' : 'btn-secondary'}`}
-                            onClick={() => setSelectedOwnerId(null)}
-                        >
-                            All
-                        </button>
-                        {owners.map((owner) => (
-                            <button
-                                key={owner.id}
-                                className={`btn ${selectedOwnerId === owner.id ? 'btn-primary' : 'btn-secondary'}`}
-                                onClick={() => setSelectedOwnerId(owner.id)}
-                            >
-                                {owner.name}
-                            </button>
-                        ))}
-                    </div>
-                )}
 
                 {/* Chart */}
                 <NetWorthChart
                     snapshots={snapshots}
-                    owners={owners}
-                    selectedOwnerId={selectedOwnerId}
                 />
 
                 {/* Summary stats */}
@@ -52,7 +27,6 @@ export function NetWorth({ owners, snapshots }: NetWorthPageProps) {
                         <div className="card-title mb-md">Summary</div>
                         <NetWorthSummary
                             snapshots={snapshots}
-                            selectedOwnerId={selectedOwnerId}
                         />
                     </div>
                 )}
@@ -63,20 +37,14 @@ export function NetWorth({ owners, snapshots }: NetWorthPageProps) {
 
 interface NetWorthSummaryProps {
     snapshots: Snapshot[];
-    selectedOwnerId: string | null;
 }
 
-function NetWorthSummary({ snapshots, selectedOwnerId }: NetWorthSummaryProps) {
-    // Filter by owner if selected
-    const filtered = selectedOwnerId
-        ? snapshots.filter((s) => s.ownerId === selectedOwnerId)
-        : snapshots;
-
+function NetWorthSummary({ snapshots }: NetWorthSummaryProps) {
     // Group by month and get latest balance per account per month
     const monthlyTotals = new Map<string, number>();
     const accountMonthBalances = new Map<string, Map<string, number>>();
 
-    for (const snapshot of filtered) {
+    for (const snapshot of snapshots) {
         const month = snapshot.date.substring(0, 7);
         const key = `${snapshot.accountId}-${month}`;
 

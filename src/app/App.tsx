@@ -1,48 +1,44 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { useState, useCallback, useEffect } from 'react';
 import { Dashboard, Import, NetWorth, Transactions, Settings } from '@/pages';
-import type { Owner, Account, Transaction, Snapshot } from '@/models';
+import type { Account, Transaction, Snapshot } from '@/models';
 
 // Mock data for development
-const MOCK_OWNERS: Owner[] = [
-    { id: 'owner-1', name: 'John' },
-    { id: 'owner-2', name: 'Jane' },
-];
+// No owners needed for single-user mode
 
 const MOCK_ACCOUNTS: Account[] = [
-    { id: 'acc-1', ownerId: 'owner-1', institution: 'DBS', name: 'Savings', type: 'bank' },
-    { id: 'acc-2', ownerId: 'owner-1', institution: 'DBS', name: 'Credit Card', type: 'credit' },
-    { id: 'acc-3', ownerId: 'owner-1', institution: 'Syfe', name: 'REIT+', type: 'brokerage' },
-    { id: 'acc-4', ownerId: 'owner-2', institution: 'OCBC', name: 'Savings', type: 'bank' },
-    { id: 'acc-5', ownerId: 'owner-2', institution: 'StashAway', name: 'Portfolio', type: 'brokerage' },
+    { id: 'acc-1', productId: 'uob-one-fx', institution: 'UOB', name: 'UOB One (with FX+)', type: 'bank' },
+    { id: 'acc-2', productId: 'uob-ladys', institution: 'UOB', name: 'UOB Lady\'s Savings', type: 'hysa' },
+    { id: 'acc-3', institution: 'DBS', name: 'Multiplier', type: 'bank' },
+    { id: 'acc-4', institution: 'Syfe', name: 'REIT+', type: 'brokerage' },
+    { id: 'acc-5', institution: 'StashAway', name: 'Portfolio', type: 'brokerage' },
 ];
 
 const MOCK_TRANSACTIONS: Transaction[] = [
-    { id: 't-1', date: '2026-01-05', ownerId: 'owner-1', accountId: 'acc-1', type: 'expense', category: 'Food & Dining', amount: -85.50, description: 'Dinner at Restaurant' },
-    { id: 't-2', date: '2026-01-04', ownerId: 'owner-1', accountId: 'acc-2', type: 'expense', category: 'Online Shopping', amount: -250.00, description: 'Amazon Order' },
-    { id: 't-3', date: '2026-01-03', ownerId: 'owner-1', accountId: 'acc-1', type: 'income', category: 'Salary', amount: 8500.00, description: 'Monthly Salary' },
-    { id: 't-4', date: '2026-01-02', ownerId: 'owner-1', accountId: 'acc-3', type: 'investment', category: 'Dividend', amount: 125.40, description: 'REIT Dividend' },
-    { id: 't-5', date: '2026-01-01', ownerId: 'owner-2', accountId: 'acc-4', type: 'expense', category: 'Transport', amount: -45.00, description: 'Grab Rides' },
-    { id: 't-6', date: '2025-12-28', ownerId: 'owner-1', accountId: 'acc-2', type: 'expense', category: 'Healthcare', amount: -1200.00, description: 'Medical Check-up', tag: 'Medical' },
-    { id: 't-7', date: '2025-12-25', ownerId: 'owner-2', accountId: 'acc-5', type: 'investment', category: 'Interest', amount: 89.20, description: 'Portfolio Interest' },
+    { id: 't-1', date: '2026-01-05', accountId: 'acc-1', type: 'expense', category: 'Food & Dining', amount: -85.50, description: 'Dinner at Restaurant' },
+    { id: 't-2', date: '2026-01-04', accountId: 'acc-3', type: 'expense', category: 'Online Shopping', amount: -250.00, description: 'Amazon Order' },
+    { id: 't-3', date: '2026-01-03', accountId: 'acc-1', type: 'income', category: 'Salary', amount: 8500.00, description: 'Monthly Salary' },
+    { id: 't-4', date: '2026-01-02', accountId: 'acc-4', type: 'investment', category: 'Dividend', amount: 125.40, description: 'REIT Dividend' },
+    { id: 't-5', date: '2025-12-28', accountId: 'acc-2', type: 'expense', category: 'Healthcare', amount: -1200.00, description: 'Medical Check-up', tag: 'Medical' },
+    { id: 't-6', date: '2025-12-25', accountId: 'acc-5', type: 'investment', category: 'Interest', amount: 89.20, description: 'Portfolio Interest' },
 ];
 
 const MOCK_SNAPSHOTS: Snapshot[] = [
     // December 2025
-    { date: '2025-12-01', ownerId: 'owner-1', accountId: 'acc-1', balance: 45000 },
-    { date: '2025-12-01', ownerId: 'owner-1', accountId: 'acc-3', balance: 32000 },
-    { date: '2025-12-01', ownerId: 'owner-2', accountId: 'acc-4', balance: 28000 },
-    { date: '2025-12-01', ownerId: 'owner-2', accountId: 'acc-5', balance: 15000 },
+    // December 2025
+    { date: '2025-12-01', accountId: 'acc-1', balance: 45000 },
+    { date: '2025-12-01', accountId: 'acc-3', balance: 28000 },
+    { date: '2025-12-01', accountId: 'acc-4', balance: 32000 },
+    { date: '2025-12-01', accountId: 'acc-5', balance: 15000 },
     // January 2026
-    { date: '2026-01-01', ownerId: 'owner-1', accountId: 'acc-1', balance: 48500 },
-    { date: '2026-01-01', ownerId: 'owner-1', accountId: 'acc-3', balance: 33200 },
-    { date: '2026-01-01', ownerId: 'owner-2', accountId: 'acc-4', balance: 29500 },
-    { date: '2026-01-01', ownerId: 'owner-2', accountId: 'acc-5', balance: 15800 },
+    { date: '2026-01-01', accountId: 'acc-1', balance: 48500 },
+    { date: '2026-01-01', accountId: 'acc-3', balance: 29500 },
+    { date: '2026-01-01', accountId: 'acc-4', balance: 33200 },
+    { date: '2026-01-01', accountId: 'acc-5', balance: 15800 },
 ];
 
 function App() {
     // State management
-    const [owners, setOwners] = useState<Owner[]>(MOCK_OWNERS);
     const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
     const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
     const [snapshots, setSnapshots] = useState<Snapshot[]>(MOCK_SNAPSHOTS);
@@ -63,9 +59,6 @@ function App() {
     }, [transactions]);
 
     // Handlers
-    const handleAddOwner = useCallback((owner: Owner) => {
-        setOwners((prev) => [...prev, owner]);
-    }, []);
 
     const handleAddAccount = useCallback((account: Account) => {
         setAccounts((prev) => [...prev, account]);
@@ -84,12 +77,18 @@ function App() {
     return (
         <BrowserRouter>
             <div className="app">
+                {/* Mobile Header with Settings Gear */}
+                <header className="mobile-header">
+                    <NavLink to="/settings" className="settings-gear">
+                        ⚙️
+                    </NavLink>
+                </header>
+
                 <Routes>
                     <Route
                         path="/"
                         element={
                             <Dashboard
-                                owners={owners}
                                 accounts={accounts}
                                 transactions={transactions}
                                 snapshots={snapshots}
@@ -109,7 +108,7 @@ function App() {
                     />
                     <Route
                         path="/net-worth"
-                        element={<NetWorth owners={owners} snapshots={snapshots} />}
+                        element={<NetWorth snapshots={snapshots} />}
                     />
                     <Route
                         path="/transactions"
@@ -125,16 +124,14 @@ function App() {
                         path="/settings"
                         element={
                             <Settings
-                                owners={owners}
                                 accounts={accounts}
-                                onAddOwner={handleAddOwner}
                                 onAddAccount={handleAddAccount}
                             />
                         }
                     />
                 </Routes>
 
-                {/* Bottom Navigation */}
+                {/* Bottom Navigation - 4 items on mobile, 5 on desktop */}
                 <nav className="bottom-nav">
                     <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
                         <span className="nav-item-icon">🏠</span>
@@ -152,7 +149,8 @@ function App() {
                         <span className="nav-item-icon">📋</span>
                         <span>Transactions</span>
                     </NavLink>
-                    <NavLink to="/settings" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+                    {/* Settings only shown in nav on desktop via CSS */}
+                    <NavLink to="/settings" className={({ isActive }) => `nav-item nav-item-settings ${isActive ? 'active' : ''}`}>
                         <span className="nav-item-icon">⚙️</span>
                         <span>Settings</span>
                     </NavLink>
