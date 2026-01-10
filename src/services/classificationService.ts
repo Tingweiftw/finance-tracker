@@ -9,6 +9,7 @@ const INCOME_KEYWORDS = [
     'commission',
     'freelance',
     'consulting',
+    'sala',  // UOB salary transfer
 ];
 
 const INVESTMENT_KEYWORDS = [
@@ -25,6 +26,8 @@ const TRANSFER_PATTERNS = [
     /credit card/i,
     /card payment/i,
     /pay(ment)? to.*card/i,
+    /mbk-/i,  // UOB bill payment to credit card
+    /bill payment.*mbk/i,
     // Internal transfers
     /transfer to/i,
     /transfer from/i,
@@ -80,12 +83,41 @@ export function classifyTransaction(
 }
 
 /**
+ * Available categories for dropdown selection
+ */
+export const CATEGORIES = [
+    'Food & Dining',
+    'Groceries',
+    'Transport',
+    'Online Shopping',
+    'Clothing',
+    'Phone',
+    'Utilities',
+    'Subscriptions',
+    'Housing',
+    'Insurance',
+    'Healthcare',
+    'Fitness',
+    'Salary',
+    'Investment Income',
+    'Refund',
+    'Transfer',
+    'Other',
+];
+
+/**
  * Suggest a category based on description
  */
 export function suggestCategory(description: string): string {
     const lowerDesc = description.toLowerCase();
 
     const categoryPatterns: [RegExp, string][] = [
+        // UOB-specific patterns
+        [/nets debit-consumer/i, 'Food & Dining'],  // Usually food/retail
+        [/paynow-fast/i, 'Other'],  // Could be anything, user should classify
+        [/sala\b/i, 'Salary'],  // UOB salary
+        [/mbk-/i, 'Transfer'],  // Credit card payment
+
         // Food & Dining
         [/restaurant|cafe|coffee|starbucks|mcdonald|grab food|foodpanda|deliveroo/i, 'Food & Dining'],
         [/supermarket|fairprice|cold storage|sheng siong|ntuc/i, 'Groceries'],

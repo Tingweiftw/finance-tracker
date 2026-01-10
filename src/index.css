@@ -849,3 +849,77 @@ textarea {
     align-items: center;
   }
 }
+
+/* ===== Import Page Transaction Row ===== */
+.import-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.import-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.import-controls {
+  display: flex;
+  flex-direction: row;
+  gap: var(--space-sm);
+}
+
+.import-controls select {
+  flex: 1;
+  /* Equal width on mobile */
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .import-row {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-lg);
+  }
+
+  .import-controls {
+    flex-direction: column;
+    gap: var(--space-xs);
+    width: 160px;
+    /* Equal column width for both dropdowns on desktop */
+    flex-shrink: 0;
+  }
+
+  .import-controls select {
+    flex: none;
+    width: 100%;
+  }
+}
+
+/* Filename display in import preview */
+.import-filename {
+  overflow-x: auto;
+  white-space: nowrap;
+  max-width: 120px;
+  -webkit-overflow-scrolling: touch;
+}
+
+@media (min-width: 768px) {
+  .import-filename {
+    max-width: none;
+    overflow: visible;
+    white-space: normal;
+    word-break: break-all;
+  }
+}
+.import-description { font-size: 0.85rem; font-weight: 500; }
+.import-date { font-size: 0.75rem; }
+.import-amount { font-size: 0.85rem; }
+.import-select { font-size: 0.75rem; }
+
+@media (min-width: 768px) {
+  .import-description { font-size: 1.1rem; }
+  .import-date { font-size: 0.9rem; }
+  .import-amount { font-size: 1.1rem; }
+  .import-select { font-size: 0.9rem; }
+}

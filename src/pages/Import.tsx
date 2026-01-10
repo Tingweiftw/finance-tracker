@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
-import { ACCOUNT_TYPE_ICONS, type Account, type Transaction } from '@/models';
+import { ACCOUNT_TYPE_ICONS, type Account, type Transaction, type TransactionType, TRANSACTION_TYPE_LABELS } from '@/models';
 import { validateFileType } from '@/services/ingestionService';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 import { extractTextFromPDF, isPDFFile } from '@/utils/pdfExtractor';
 import { parseUOBStatement } from '@/services/parsers/uobStatementParser';
-import { processTransaction } from '@/services/classificationService';
+import { processTransaction, CATEGORIES } from '@/services/classificationService';
 import { formatDate } from '@/utils/date';
 
 interface ImportPageProps {
@@ -135,6 +135,26 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
         }
     }, [state.selectedAccount, existingHashes]);
 
+    const handleTransactionTypeChange = (transactionId: string, newType: TransactionType) => {
+        setState((prev) => ({
+            ...prev,
+            parsedTransactions: prev.parsedTransactions.map((t) =>
+                t.id === transactionId
+                    ? { ...t, type: newType, amount: Math.abs(t.amount) * (newType === 'expense' ? -1 : 1) }
+                    : t
+            ),
+        }));
+    };
+
+    const handleCategoryChange = (transactionId: string, newCategory: string) => {
+        setState((prev) => ({
+            ...prev,
+            parsedTransactions: prev.parsedTransactions.map((t) =>
+                t.id === transactionId ? { ...t, category: newCategory } : t
+            ),
+        }));
+    };
+
     const handleConfirmImport = () => {
         onImport(state.parsedTransactions);
         setState((prev) => ({
@@ -257,69 +277,120 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                 {/* Step: Preview */}
                 {state.step === 'preview' && (
                     <div>
-                        {/* Summary */}
-                        <div className="card mb-lg">
-                            <div className="flex justify-between mb-md">
-                                <span className="text-secondary">File</span>
-                                <span className="font-medium">{state.file?.name}</span>
-                            </div>
-                            <div className="flex justify-between mb-md">
-                                <span className="text-secondary">New transactions</span>
-                                <span className="font-medium text-income">{state.parsedTransactions.length}</span>
-                            </div>
-                            {state.duplicateCount > 0 && (
-                                <div className="flex justify-between mb-md">
-                                    <span className="text-secondary">Duplicates skipped</span>
-                                    <span className="font-medium text-muted">{state.duplicateCount}</span>
+                        {/* Summary and Balance - horizontal row, wraps on mobile */}
+                        <div className="flex gap-sm mb-lg" style={{ flexWrap: 'wrap' }}>
+                            {/* Summary */}
+                            <div className="card" style={{ flex: '1 1 150px', minWidth: '150px' }}>
+                                <div className="flex justify-between mb-sm" style={{ gap: 'var(--space-sm)' }}>
+                                    <span className="text-secondary text-sm">File</span>
+                                    <div className="import-filename">
+                                        <span className="font-medium text-sm">
+                                            {state.file?.name}
+                                        </span>
+                                    </div>
                                 </div>
-                            )}
-                            {state.errors.length > 0 && (
                                 <div className="flex justify-between">
-                                    <span className="text-secondary">Parse errors</span>
-                                    <span className="font-medium text-expense">{state.errors.length}</span>
+                                    <span className="text-secondary text-sm">New</span>
+                                    <span className="font-medium text-income text-sm">{state.parsedTransactions.length}</span>
+                                </div>
+                                {state.duplicateCount > 0 && (
+                                    <div className="flex justify-between mt-sm">
+                                        <span className="text-secondary text-sm">Skipped</span>
+                                        <span className="font-medium text-muted text-sm">{state.duplicateCount}</span>
+                                    </div>
+                                )}
+                            </div>
+                            {/* Balance */}
+                            {state.closingBalance !== null && (
+                                <div className="card" style={{ flex: '1 1 120px', minWidth: '120px', textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+                                    <div className="text-secondary text-sm">Balance</div>
+                                    <div className="font-semibold text-lg">
+                                        ${state.closingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                    </div>
                                 </div>
                             )}
                         </div>
-
-                        {/* Balance */}
-                        {state.closingBalance !== null && (
-                            <div className="card mb-lg" style={{ textAlign: 'center' }}>
-                                <div className="text-secondary text-sm mb-sm">Balance</div>
-                                <div className="font-semibold text-lg">
-                                    ${state.closingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
-                                </div>
-                            </div>
-                        )}
 
                         {/* Transaction preview - scrollable */}
                         <div className="section-title mb-md">All transactions ({state.parsedTransactions.length})</div>
                         <div
                             className="list mb-lg"
                             style={{
-                                maxHeight: '300px',
+                                maxHeight: '400px',
                                 overflowY: 'auto',
                                 border: '1px solid var(--color-bg-hover)',
                                 borderRadius: 'var(--radius-md)'
                             }}
                         >
-                            {state.parsedTransactions.map((t) => (
-                                <div key={t.id} className="list-item" style={{ alignItems: 'flex-start' }}>
-                                    <div className="list-item-content" style={{ minWidth: 0 }}>
-                                        <div className="list-item-title" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
-                                            {t.description}
-                                        </div>
-                                        <div className="list-item-subtitle">
-                                            {formatDate(t.date)} • {t.category}
-                                        </div>
-                                    </div>
+                            {state.parsedTransactions.map((t) => {
+                                const isHighValue = Math.abs(t.amount) > 100;
+                                return (
                                     <div
-                                        className={`list-item-value ${t.amount < 0 ? 'text-expense' : 'text-income'}`}
-                                        style={{ whiteSpace: 'nowrap', marginLeft: 'var(--space-md)' }}
+                                        key={t.id}
+                                        className="card mb-sm"
+                                        style={{
+                                            padding: 'var(--space-md)',
+                                            borderLeft: isHighValue ? '3px solid var(--color-warning)' : undefined,
+                                            background: isHighValue ? 'rgba(251, 191, 36, 0.1)' : undefined,
+                                        }}
                                     >
-                                        {t.amount < 0 ? '-' : '+'}{Math.abs(t.amount).toFixed(2)}
+                                        <div className="import-row">
+                                            {/* Left Column: Info */}
+                                            <div className="import-info">
+                                                <div className="import-description" style={{ wordBreak: 'break-word', marginBottom: '2px' }}>
+                                                    {t.description}
+                                                </div>
+                                                <div className="flex justify-between items-center" style={{ marginTop: '2px' }}>
+                                                    <div className="import-date text-secondary">
+                                                        {formatDate(t.date)}
+                                                    </div>
+                                                    <div
+                                                        className={`import-amount font-semibold ${t.amount < 0 ? 'text-expense' : 'text-income'}`}
+                                                    >
+                                                        {t.amount < 0 ? '-' : '+'}${Math.abs(t.amount).toFixed(2)}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Right Column: Controls */}
+                                            <div className="import-controls">
+                                                <select
+                                                    value={t.type}
+                                                    onChange={(e) => handleTransactionTypeChange(t.id, e.target.value as TransactionType)}
+                                                    className="import-select"
+                                                    style={{
+                                                        padding: '4px 6px',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid var(--color-bg-hover)',
+                                                        background: 'var(--color-bg-secondary)',
+                                                        color: 'var(--color-text)',
+                                                    }}
+                                                >
+                                                    {Object.entries(TRANSACTION_TYPE_LABELS).map(([value, label]) => (
+                                                        <option key={value} value={value}>{label}</option>
+                                                    ))}
+                                                </select>
+                                                <select
+                                                    value={t.category}
+                                                    onChange={(e) => handleCategoryChange(t.id, e.target.value)}
+                                                    className="import-select"
+                                                    style={{
+                                                        padding: '4px 6px',
+                                                        borderRadius: 'var(--radius-sm)',
+                                                        border: '1px solid var(--color-bg-hover)',
+                                                        background: 'var(--color-bg-secondary)',
+                                                        color: 'var(--color-text)',
+                                                    }}
+                                                >
+                                                    {CATEGORIES.map((cat) => (
+                                                        <option key={cat} value={cat}>{cat}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
                                     </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
 
                         <div className="flex gap-md">
@@ -351,6 +422,6 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                     </div>
                 )}
             </div>
-        </div>
+        </div >
     );
 }
