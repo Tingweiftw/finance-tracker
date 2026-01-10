@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import { ACCOUNT_TYPE_ICONS, type Account, type Transaction } from '@/models';
 import { validateFileType } from '@/services/ingestionService';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
+import { extractTextFromPDF, isPDFFile } from '@/utils/pdfExtractor';
+import { parseUOBStatement } from '@/services/parsers/uobStatementParser';
 import { processTransaction } from '@/services/classificationService';
 import { formatDate } from '@/utils/date';
 
@@ -20,6 +22,9 @@ interface ImportState {
     parsedTransactions: Transaction[];
     duplicateCount: number;
     errors: string[];
+    isLoading: boolean;
+    openingBalance: number | null;
+    closingBalance: number | null;
 }
 
 export function Import({ accounts, existingHashes, onImport }: ImportPageProps) {
@@ -30,6 +35,9 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
         parsedTransactions: [],
         duplicateCount: 0,
         errors: [],
+        isLoading: false,
+        openingBalance: null,
+        closingBalance: null,
     });
 
     const handleAccountSelect = (account: Account) => {
@@ -53,42 +61,78 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
             return;
         }
 
-        // Parse file
-        const content = await file.text();
-        const { rows, errors } = parseCSV(content);
+        setState((prev) => ({ ...prev, isLoading: true, errors: [] }));
 
-        // Process transactions
-        const transactions: Transaction[] = [];
-        let duplicateCount = 0;
+        try {
+            let rows: { date: string; description: string; amount: number; balance?: number }[] = [];
+            let parseErrors: string[] = [];
 
-        for (const row of rows) {
-            const hash = generateTransactionHash(row.date, row.description, row.amount);
+            if (isPDFFile(file)) {
+                // PDF parsing flow
+                const pdfText = await extractTextFromPDF(file);
+                const parsedStatement = parseUOBStatement(pdfText);
 
-            if (existingHashes.has(hash)) {
-                duplicateCount++;
-                continue;
+                rows = parsedStatement.transactions.map(t => ({
+                    date: t.date,
+                    description: t.description,
+                    amount: t.amount,
+                    balance: t.balance,
+                }));
+
+                // Store opening/closing balance
+                setState(prev => ({
+                    ...prev,
+                    openingBalance: parsedStatement.openingBalance,
+                    closingBalance: parsedStatement.closingBalance,
+                }));
+            } else {
+                // CSV parsing flow
+                const content = await file.text();
+                const result = parseCSV(content);
+                rows = result.rows;
+                parseErrors = result.errors;
             }
 
-            const transaction = processTransaction(
-                `${state.selectedAccount.id}-${hash}`,
-                row.date,
-                row.description,
-                row.amount,
-                state.selectedAccount.id,
-                state.selectedAccount.type
-            );
+            // Process transactions
+            const transactions: Transaction[] = [];
+            let duplicateCount = 0;
 
-            transactions.push(transaction);
+            for (const row of rows) {
+                const hash = generateTransactionHash(row.date, row.description, row.amount);
+
+                if (existingHashes.has(hash)) {
+                    duplicateCount++;
+                    continue;
+                }
+
+                const transaction = processTransaction(
+                    `${state.selectedAccount.id}-${hash}`,
+                    row.date,
+                    row.description,
+                    row.amount,
+                    state.selectedAccount.id,
+                    state.selectedAccount.type
+                );
+
+                transactions.push(transaction);
+            }
+
+            setState((prev) => ({
+                ...prev,
+                step: 'preview',
+                file,
+                parsedTransactions: transactions,
+                duplicateCount,
+                errors: parseErrors,
+                isLoading: false,
+            }));
+        } catch (error) {
+            setState((prev) => ({
+                ...prev,
+                errors: [error instanceof Error ? error.message : 'Failed to parse file'],
+                isLoading: false,
+            }));
         }
-
-        setState((prev) => ({
-            ...prev,
-            step: 'preview',
-            file,
-            parsedTransactions: transactions,
-            duplicateCount,
-            errors,
-        }));
     }, [state.selectedAccount, existingHashes]);
 
     const handleConfirmImport = () => {
@@ -107,6 +151,9 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
             parsedTransactions: [],
             duplicateCount: 0,
             errors: [],
+            isLoading: false,
+            openingBalance: null,
+            closingBalance: null,
         });
     };
 
@@ -138,13 +185,13 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                                     key={account.id}
                                     className="list-item w-full"
                                     onClick={() => handleAccountSelect(account)}
-                                    style={{ textAlign: 'left' }}
+                                    style={{ textAlign: 'left', color: 'inherit' }}
                                 >
                                     <div className="list-item-icon">
                                         {ACCOUNT_TYPE_ICONS[account.type]}
                                     </div>
                                     <div className="list-item-content">
-                                        <div className="list-item-title">{account.name}</div>
+                                        <div className="list-item-title" style={{ color: 'var(--color-text)' }}>{account.name}</div>
                                         <div className="list-item-subtitle">{account.institution}</div>
                                     </div>
                                     <span style={{ color: 'var(--color-text-muted)' }}>→</span>
@@ -157,28 +204,36 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                 {/* Step: Upload File */}
                 {state.step === 'upload' && (
                     <div>
-                        <div
-                            className="card"
-                            style={{
-                                border: '2px dashed var(--color-bg-hover)',
-                                textAlign: 'center',
-                                padding: 'var(--space-2xl)',
-                                cursor: 'pointer',
-                            }}
-                        >
-                            <input
-                                type="file"
-                                accept=".csv,.pdf"
-                                onChange={handleFileUpload}
-                                style={{ display: 'none' }}
-                                id="file-upload"
-                            />
-                            <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
-                                <div style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>📄</div>
-                                <div className="text-lg font-semibold mb-sm">Upload Statement</div>
-                                <div className="text-secondary text-sm">CSV or PDF file</div>
-                            </label>
-                        </div>
+                        {state.isLoading ? (
+                            <div className="card" style={{ textAlign: 'center', padding: 'var(--space-2xl)' }}>
+                                <div style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>⏳</div>
+                                <div className="text-lg font-semibold mb-sm">Processing PDF...</div>
+                                <div className="text-secondary text-sm">Extracting transactions from your statement</div>
+                            </div>
+                        ) : (
+                            <div
+                                className="card"
+                                style={{
+                                    border: '2px dashed var(--color-bg-hover)',
+                                    textAlign: 'center',
+                                    padding: 'var(--space-2xl)',
+                                    cursor: 'pointer',
+                                }}
+                            >
+                                <input
+                                    type="file"
+                                    accept=".csv,.pdf"
+                                    onChange={handleFileUpload}
+                                    style={{ display: 'none' }}
+                                    id="file-upload"
+                                />
+                                <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
+                                    <div style={{ fontSize: '48px', marginBottom: 'var(--space-md)' }}>📄</div>
+                                    <div className="text-lg font-semibold mb-sm">Upload Statement</div>
+                                    <div className="text-secondary text-sm">CSV or PDF file</div>
+                                </label>
+                            </div>
+                        )}
 
                         {state.errors.length > 0 && (
                             <div className="card mt-lg" style={{ borderLeft: '3px solid var(--color-danger)' }}>
@@ -192,6 +247,7 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                         <button
                             className="btn btn-ghost w-full mt-lg"
                             onClick={handleStartOver}
+                            disabled={state.isLoading}
                         >
                             ← Back to accounts
                         </button>
@@ -225,18 +281,41 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
                             )}
                         </div>
 
-                        {/* Transaction preview */}
-                        <div className="section-title mb-md">Preview (first 10)</div>
-                        <div className="list mb-lg">
-                            {state.parsedTransactions.slice(0, 10).map((t) => (
-                                <div key={t.id} className="list-item">
-                                    <div className="list-item-content">
-                                        <div className="list-item-title truncate">{t.description}</div>
+                        {/* Balance */}
+                        {state.closingBalance !== null && (
+                            <div className="card mb-lg" style={{ textAlign: 'center' }}>
+                                <div className="text-secondary text-sm mb-sm">Balance</div>
+                                <div className="font-semibold text-lg">
+                                    ${state.closingBalance.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Transaction preview - scrollable */}
+                        <div className="section-title mb-md">All transactions ({state.parsedTransactions.length})</div>
+                        <div
+                            className="list mb-lg"
+                            style={{
+                                maxHeight: '300px',
+                                overflowY: 'auto',
+                                border: '1px solid var(--color-bg-hover)',
+                                borderRadius: 'var(--radius-md)'
+                            }}
+                        >
+                            {state.parsedTransactions.map((t) => (
+                                <div key={t.id} className="list-item" style={{ alignItems: 'flex-start' }}>
+                                    <div className="list-item-content" style={{ minWidth: 0 }}>
+                                        <div className="list-item-title" style={{ whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                            {t.description}
+                                        </div>
                                         <div className="list-item-subtitle">
                                             {formatDate(t.date)} • {t.category}
                                         </div>
                                     </div>
-                                    <div className={`list-item-value ${t.amount < 0 ? 'text-expense' : 'text-income'}`}>
+                                    <div
+                                        className={`list-item-value ${t.amount < 0 ? 'text-expense' : 'text-income'}`}
+                                        style={{ whiteSpace: 'nowrap', marginLeft: 'var(--space-md)' }}
+                                    >
                                         {t.amount < 0 ? '-' : '+'}{Math.abs(t.amount).toFixed(2)}
                                     </div>
                                 </div>
