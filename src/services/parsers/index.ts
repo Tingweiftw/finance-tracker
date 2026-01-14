@@ -1,8 +1,9 @@
 import type { Account } from '@/models';
 import { parseUOBOneStatement, ParsedStatement } from './uobOneParser';
 import { parseUOBLadyStatement } from './uobLadyParser';
+import { parseUOBCreditCardStatement } from './uobCreditCardParser';
 
-export { parseUOBOneStatement, parseUOBLadyStatement };
+export { parseUOBOneStatement, parseUOBLadyStatement, parseUOBCreditCardStatement };
 export type { ParsedStatement };
 
 import type { PDFLine } from '@/utils/pdfExtractor';
@@ -30,6 +31,11 @@ const PARSER_REGISTRY: ParserConfig[] = [
         institution: 'UOB',
         accountName: 'UOB One (with FX+)',
         parser: parseUOBOneStatement
+    },
+    {
+        institution: 'UOB',
+        accountName: 'UOB Credit Card',
+        parser: parseUOBCreditCardStatement
     }
 ];
 

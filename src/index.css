@@ -324,6 +324,16 @@ textarea {
   font-size: var(--font-size-base);
 }
 
+.btn-danger {
+  background-color: var(--color-danger);
+  color: white;
+}
+
+.btn-danger:hover {
+  background-color: #ff5a5a;
+  transform: translateY(-1px);
+}
+
 .btn-icon {
   width: 40px;
   height: 40px;

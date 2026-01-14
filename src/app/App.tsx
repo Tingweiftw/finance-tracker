@@ -41,7 +41,7 @@ function App() {
 
 
     const handleDeleteImport = useCallback(async (record: ImportRecord) => {
-        if (!confirm(`Delete import "${record.fileName}"? This will remove all associated transactions.`)) return;
+        // Confirmation is now handled in the Import component
 
         // 1. Delete Transactions locally
         setTransactions(prev => prev.filter(t => t.importId !== record.id));

@@ -15,6 +15,7 @@ export interface ParsedStatement {
         description: string;
         amount: number;    // positive = credit, negative = debit
         balance: number;   // running balance
+        tag?: string;      // optional tag (e.g., credit card name)
     }[];
 }
 

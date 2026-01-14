@@ -18,6 +18,7 @@ export interface AccountProduct {
 export const UOB_PRODUCTS: AccountProduct[] = [
     { id: 'uob-one-fx', institution: 'UOB', name: 'UOB One (with FX+)', type: 'bank' },
     { id: 'uob-ladys', institution: 'UOB', name: 'UOB Lady\'s Savings', type: 'bank' },
+    { id: 'uob-cc', institution: 'UOB', name: 'UOB Credit Card', type: 'credit' },
 ];
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {

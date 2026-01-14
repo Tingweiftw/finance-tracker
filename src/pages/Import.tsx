@@ -41,6 +41,9 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
         closingBalance: null,
     });
 
+    // State for delete confirmation
+    const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
+
     const handleAccountSelect = (account: Account) => {
         setState((prev) => ({
             ...prev,
@@ -65,7 +68,7 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
         setState((prev) => ({ ...prev, isLoading: true, errors: [] }));
 
         try {
-            let rows: { date: string; description: string; amount: number; balance?: number }[] = [];
+            let rows: { date: string; description: string; amount: number; balance?: number; tag?: string }[] = [];
             let parseErrors: string[] = [];
             let openingBalance: number | null = null;
             let closingBalance: number | null = null;
@@ -83,15 +86,14 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                 const parsedStatement = parser({ text: pdfText, lines: pdfLayout });
 
                 // parseUOBOneStatement returns ParsedStatement
-                // BUT wait, in Step 527 lines 58-63 it was mapping it.
-                // In Step 494, parseUOBStatement signature was `(text: string, accountId ?: string)`.
-                // and it returned `{ transactions: Transaction[], openingBalance ?, closingBalance ?, statementDate ? } `.
+                // Credit card parser also includes optional 'tag' for card name
 
                 rows = parsedStatement.transactions.map(t => ({
                     date: t.date,
                     description: t.description,
                     amount: t.amount,
                     balance: t.balance, // Transaction might not have balance if not parsed
+                    tag: t.tag, // Card name for credit card transactions
                 }));
 
                 if (parsedStatement.openingBalance !== undefined) openingBalance = parsedStatement.openingBalance;
@@ -145,6 +147,11 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                     state.selectedAccount.type
                 );
 
+                // Apply tag from parser (e.g., credit card name)
+                if (row.tag) {
+                    transaction.tag = row.tag;
+                }
+
                 transactions.push(transaction);
             }
 
@@ -195,7 +202,9 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
         const importId = crypto.randomUUID();
 
         // If we parsed a closing balance, create a snapshot
-        if (state.closingBalance !== null && state.parsedTransactions.length > 0) {
+        // Skip for credit cards - they don't affect net worth (outflow tracked via bill payments)
+        const isCreditCard = state.selectedAccount.type === 'credit';
+        if (!isCreditCard && state.closingBalance !== null && state.parsedTransactions.length > 0) {
             // Use the latest transaction date as the snapshot date
             const sortedDates = state.parsedTransactions.map(t => t.date).sort();
             const latestDate = sortedDates[sortedDates.length - 1];
@@ -354,13 +363,37 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                                                         {formatDate(rec.date)}
                                                     </div>
                                                 </div>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); onDeleteImport(rec); }}
-                                                    className="text-error hover:text-red-600 px-sm py-xs hover:bg-red-50 rounded text-lg"
-                                                    title="Delete Import and Transactions"
-                                                >
-                                                    🗑️
-                                                </button>
+                                                {confirmingDeleteId === rec.id ? (
+                                                    <div className="flex gap-sm">
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setConfirmingDeleteId(null);
+                                                                onDeleteImport(rec);
+                                                            }}
+                                                            className="btn btn-danger text-xs py-xs px-sm"
+                                                        >
+                                                            Confirm
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setConfirmingDeleteId(null);
+                                                            }}
+                                                            className="text-secondary hover:text-primary text-xs px-sm font-medium"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); setConfirmingDeleteId(rec.id); }}
+                                                        className="text-error hover:text-red-600 px-sm py-xs hover:bg-red-50 rounded text-lg"
+                                                        title="Delete Import and Transactions"
+                                                    >
+                                                        🗑️
+                                                    </button>
+                                                )}
                                             </div>
                                         ))}
                                 </div>
