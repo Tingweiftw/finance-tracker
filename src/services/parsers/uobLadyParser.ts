@@ -1,6 +1,6 @@
 /**
  * UOB Bank Statement Parser
- * Parses text extracted from UOB One account PDF statements
+ * Parsestext extracted from UOB Lady Card PDF statements
  */
 
 export interface ParsedStatement {
@@ -18,7 +18,7 @@ export interface ParsedStatement {
     }[];
 }
 
-export function parseUOBStatement(text: string): ParsedStatement {
+export function parseUOBLadyStatement(text: string): ParsedStatement {
     // Extract statement period
     const periodMatch = text.match(/Period:\s*(\d{2}\s+\w{3}\s+\d{4})\s+to\s+(\d{2}\s+\w{3}\s+\d{4})/);
     if (!periodMatch) {

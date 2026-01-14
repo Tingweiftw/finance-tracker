@@ -1,5 +1,5 @@
 import { processTransaction } from './classificationService';
-import { parseUOBStatement } from './parsers/uobStatementParser';
+import { getParser } from './parsers';
 import type { Transaction, Account } from '@/models';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 
@@ -55,7 +55,8 @@ export async function importUOBStatement(
     account: Account,
     existingHashes: Set<string>
 ): Promise<ImportResult> {
-    const parsed = parseUOBStatement(text);
+    const parser = getParser(account);
+    const parsed = parser(text);
     const transactions: Transaction[] = [];
     let duplicates = 0;
 
@@ -65,6 +66,14 @@ export async function importUOBStatement(
 
         if (existingHashes.has(hash)) {
             duplicates++;
+            // The original instruction included a block here that referenced `file.type`.
+            // However, `importUOBStatement` does not receive a `file` parameter.
+            // Assuming the intent was to add a specific check or throw an error
+            // related to PDF processing within this function, but without the `file` context,
+            // the provided `if (file.type === 'application/pdf')` condition cannot be applied directly.
+            // For now, the original `continue` is kept to maintain functionality.
+            // If a specific error condition for PDF duplicates is needed here,
+            // it would require re-evaluating the context or adding a `file` parameter.
             continue;
         }
 

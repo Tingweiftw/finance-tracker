@@ -3,7 +3,7 @@ import { ACCOUNT_TYPE_ICONS, type Account, type Transaction, type TransactionTyp
 import { validateFileType } from '@/services/ingestionService';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 import { extractTextFromPDF, isPDFFile } from '@/utils/pdfExtractor';
-import { parseUOBStatement } from '@/services/parsers/uobStatementParser';
+import { getParser } from '@/services/parsers';
 import { processTransaction, CATEGORIES } from '@/services/classificationService';
 import { formatCurrency, formatDate } from '@/utils/date';
 
@@ -73,8 +73,13 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
             if (isPDFFile(file)) {
                 // PDF parsing flow
                 const pdfText = await extractTextFromPDF(file);
-                const parsedStatement = parseUOBStatement(pdfText);
-                // parseUOBStatement returns Transaction[] directly if using the new parser, 
+                // Select parser based on account
+                const parser = getParser(state.selectedAccount);
+                console.log('Import: Selected parser for', state.selectedAccount.name);
+
+                const parsedStatement = parser(pdfText);
+
+                // parseUOBOneStatement returns ParsedStatement
                 // BUT wait, in Step 527 lines 58-63 it was mapping it.
                 // In Step 494, parseUOBStatement signature was `(text: string, accountId?: string)`.
                 // and it returned `{ transactions: Transaction[], openingBalance?, closingBalance?, statementDate? }`.
