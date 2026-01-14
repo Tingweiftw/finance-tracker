@@ -2,35 +2,60 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { useState, useCallback, useEffect } from 'react';
 import { Dashboard, Import, NetWorth, Transactions, Settings } from '@/pages';
 import type { Account, Transaction, Snapshot } from '@/models';
-import { getAccounts, getTransactions, getSnapshots, addTransactions, addAccount, addSnapshot } from '@/services/sheetsService';
+import { getAccounts, getTransactions, getSnapshots, getImports, addTransactions, addAccount, addSnapshot, addImport, deleteTransactionsByImportId, deleteImportRecord, deleteSnapshotsByImportId } from '@/services/sheetsService';
+import type { ImportRecord } from '@/models';
 
-// Mock data removed
+// ... (existing code)
 
 function App() {
     // State management
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+    const [imports, setImports] = useState<ImportRecord[]>([]); // New state
     const [existingHashes] = useState<Set<string>>(new Set());
 
     // Load data from Sheets on mount
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [loadedAccounts, loadedTransactions, loadedSnapshots] = await Promise.all([
+                const [loadedAccounts, loadedTransactions, loadedSnapshots, loadedImports] = await Promise.all([
                     getAccounts(),
                     getTransactions(),
-                    getSnapshots()
+                    getSnapshots(),
+                    getImports()
                 ]);
 
                 if (loadedAccounts) setAccounts(loadedAccounts);
                 if (loadedTransactions) setTransactions(loadedTransactions);
                 if (loadedSnapshots) setSnapshots(loadedSnapshots);
+                if (loadedImports) setImports(loadedImports);
             } catch (error) {
                 console.error('Failed to load data:', error);
             }
         };
         loadData();
+    }, []);
+
+    // ... (existing code)
+
+
+    const handleDeleteImport = useCallback(async (record: ImportRecord) => {
+        if (!confirm(`Delete import "${record.fileName}"? This will remove ${record.transactionCount} transactions.`)) return;
+
+        // 1. Delete Transactions locally
+        setTransactions(prev => prev.filter(t => t.importId !== record.id));
+
+        // 2. Delete Import Record locally
+        setImports(prev => prev.filter(i => i.id !== record.id));
+
+        // 3. Delete from Sheets
+        console.log('App: Deleting transactions...');
+        await deleteTransactionsByImportId(record.id);
+        console.log('App: Deleting snapshots...');
+        await deleteSnapshotsByImportId(record.id);
+        console.log('App: Deleting import record...');
+        await deleteImportRecord(record.id);
     }, []);
 
     // Calculate last import dates
@@ -62,14 +87,20 @@ function App() {
         }
     }, []);
 
-    const handleImportTransactions = useCallback(async (newTransactions: Transaction[]) => {
+    const handleImportTransactions = useCallback(async (newTransactions: Transaction[], importRecord?: ImportRecord) => {
         setTransactions((prev) => [...prev, ...newTransactions]);
 
         // Persist to Google Sheets
         console.log('App: Saving imported transactions to Sheets...', newTransactions.length);
         const success = await addTransactions(newTransactions);
+
         if (success) {
             console.log('App: Successfully saved transactions to Sheets');
+            // Persist Import Record
+            if (importRecord) {
+                setImports(prev => [...prev, importRecord]);
+                await addImport(importRecord);
+            }
         } else {
             console.error('App: Failed to save transactions to Sheets');
         }
@@ -124,6 +155,8 @@ function App() {
                                 existingHashes={existingHashes}
                                 onImport={handleImportTransactions}
                                 onSnapshot={handleSnapshot}
+                                imports={imports}
+                                onDeleteImport={handleDeleteImport}
                             />
                         }
                     />

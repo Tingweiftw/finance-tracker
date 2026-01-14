@@ -58,7 +58,6 @@ export async function showNotification(payload: NotificationPayload): Promise<vo
         badge: '/pwa-192x192.png',
         tag: payload.type,
         data: payload.data,
-        vibrate: [200, 100, 200],
     });
 }
 

@@ -7,4 +7,4 @@ export {
     UOB_PRODUCTS
 } from './Account';
 export { type Transaction, type TransactionType, TRANSACTION_TYPE_LABELS, TRANSACTION_TYPE_ICONS } from './Transaction';
-export { type Snapshot } from './Snapshot';
+export { type Snapshot, type ImportRecord } from './Snapshot';

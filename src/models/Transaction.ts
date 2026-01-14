@@ -9,6 +9,7 @@ export interface Transaction {
     amount: number;
     description: string;
     tag?: string;
+    importId?: string;
 }
 
 export const TRANSACTION_TYPE_LABELS: Record<TransactionType, string> = {

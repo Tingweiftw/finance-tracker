@@ -26,6 +26,7 @@ const SHEETS_CONFIG = {
         accounts: 'Accounts',
         transactions: 'Transactions',
         snapshots: 'Snapshots',
+        imports: 'Imports',
     },
 };
 
@@ -201,6 +202,7 @@ const parseTransactionRow = (row: string[]): Transaction => ({
     amount: parseFloat(row[5]),
     description: row[6],
     tag: row[7] || undefined,
+    importId: row[8] || undefined,
 });
 
 export async function getTransactions(): Promise<Transaction[]> {
@@ -217,6 +219,7 @@ export async function addTransactions(transactions: Transaction[]): Promise<bool
         t.amount,
         t.description,
         t.tag || '',
+        t.importId || '',
     ]);
     return appendRows(SHEETS_CONFIG.sheets.transactions, values);
 }
@@ -227,6 +230,7 @@ const parseSnapshotRow = (row: string[]): Snapshot => ({
     date: row[0],
     accountId: row[1],
     balance: parseFloat(row[2]),
+    importId: row[3] || undefined,
 });
 
 export async function getSnapshots(): Promise<Snapshot[]> {
@@ -235,8 +239,213 @@ export async function getSnapshots(): Promise<Snapshot[]> {
 
 export async function addSnapshot(snapshot: Snapshot): Promise<boolean> {
     return appendRows(SHEETS_CONFIG.sheets.snapshots, [
-        [snapshot.date, snapshot.accountId, snapshot.balance],
+        [snapshot.date, snapshot.accountId, snapshot.balance, snapshot.importId || ''],
     ]);
+}
+
+export async function deleteSnapshotsByImportId(importId: string): Promise<boolean> {
+    const all = await getSnapshots();
+    const kept = all.filter(s => s.importId !== importId);
+
+    if (kept.length === all.length) return true;
+
+    // Overwrite Snapshots Sheet
+    if (!isSheetsConfigured()) return false;
+    try {
+        const token = await getAccessToken();
+        const sheetName = SHEETS_CONFIG.sheets.snapshots;
+
+        // Clear
+        await fetch(`${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z:clear`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (kept.length === 0) return true;
+
+        const values = kept.map(s => [
+            s.date,
+            s.accountId,
+            s.balance,
+            s.importId || ''
+        ]);
+
+        const response = await fetch(`${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z?valueInputOption=USER_ENTERED`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ values }),
+        });
+
+        return response.ok;
+
+    } catch (e) {
+        console.error('Delete Snapshots Failed:', e);
+        return false;
+    }
+}
+
+// ===== Imports =====
+
+import type { ImportRecord } from '@/models';
+
+const parseImportRow = (row: string[]): ImportRecord => ({
+    id: row[0],
+    date: row[1],
+    accountId: row[2],
+    fileName: row[3],
+    transactionCount: parseInt(row[4] || '0', 10),
+});
+
+export async function getImports(): Promise<ImportRecord[]> {
+    return readRange(SHEETS_CONFIG.sheets.imports, parseImportRow);
+}
+
+export async function addImport(record: ImportRecord): Promise<boolean> {
+    return appendRows(SHEETS_CONFIG.sheets.imports, [
+        [
+            record.id,
+            record.date,
+            record.accountId,
+            record.fileName,
+            (record.transactionCount || 0).toString()
+        ]
+    ]);
+}
+
+/**
+ * Delete transactions by ID (Expensive: rewrites sheet)
+ */
+export async function deleteTransactions(idsToDelete: string[]): Promise<boolean> {
+    if (idsToDelete.length === 0) return true;
+    const deleteSet = new Set(idsToDelete);
+
+    // 1. Read all
+    const all = await getTransactions();
+
+    // 2. Filter
+    const kept = all.filter(t => !deleteSet.has(t.id));
+
+    if (kept.length === all.length) return true; // Nothing to delete
+
+    // 3. Clear and Rewrite
+    // Note: This is risky if connection drops during write.
+    // Ideally we would duplicate sheet, write to new, swap.
+    // For personal project, simple truncate + append is acceptable but requires AUTH token to rewrite safely.
+    // The current service uses `appendRows`. We need `writeSheet`.
+
+    return overwriteSheet(SHEETS_CONFIG.sheets.transactions, kept);
+}
+
+/**
+ * Helper to overwrite entire transactions sheet
+ */
+async function overwriteSheet(sheetName: string, transactions: Transaction[]): Promise<boolean> {
+    if (!isSheetsConfigured()) return false;
+
+    try {
+        const token = await getAccessToken();
+
+        // 1. Clear Sheet content (keep headers ideally, but we'll just rewrite everything from A2)
+        const clearUrl = `${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z:clear`;
+
+        await fetch(clearUrl, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        // 2. Write new values
+        if (transactions.length === 0) return true;
+
+        const values = transactions.map((t) => [
+            t.id,
+            t.date,
+            t.accountId,
+            t.type,
+            t.category,
+            t.amount,
+            t.description,
+            t.tag || '',
+        ]);
+
+        const writeUrl = `${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z?valueInputOption=USER_ENTERED`;
+
+        const response = await fetch(writeUrl, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ values }),
+        });
+
+        if (!response.ok) throw new Error(`Write failed: ${response.status}`);
+        return true;
+    } catch (error) {
+        console.error('Sheets Service: Overwrite Error:', error);
+        return false;
+    }
+}
+
+/**
+ * Delete transactions by Import ID
+ */
+export async function deleteTransactionsByImportId(importId: string): Promise<boolean> {
+    const all = await getTransactions();
+    const kept = all.filter(t => t.importId !== importId);
+
+    if (kept.length === all.length) return true;
+
+    return overwriteSheet(SHEETS_CONFIG.sheets.transactions, kept);
+}
+
+export async function deleteImportRecord(importId: string): Promise<boolean> {
+    // Similar logic: Read all, filter, rewrite
+    // This is getting repetitive, but fine for now.
+    const all = await getImports();
+    const kept = all.filter(r => r.id !== importId);
+
+    if (kept.length === all.length) return true;
+
+    // Rewrite Imports Sheet
+    if (!isSheetsConfigured()) return false;
+
+    try {
+        const token = await getAccessToken();
+        const sheetName = SHEETS_CONFIG.sheets.imports;
+
+        // Clear
+        await fetch(`${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z:clear`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (kept.length === 0) return true;
+
+        const values = kept.map(r => [
+            r.id,
+            r.date,
+            r.accountId,
+            r.fileName,
+            (r.transactionCount || 0).toString()
+        ]);
+
+        const response = await fetch(`${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z?valueInputOption=USER_ENTERED`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ values }),
+        });
+
+        return response.ok;
+    } catch (e) {
+        console.error('Delete Import Error:', e);
+        return false;
+    }
 }
 
 // ===== Utility functions =====
