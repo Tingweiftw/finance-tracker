@@ -56,7 +56,7 @@ export async function importUOBStatement(
     existingHashes: Set<string>
 ): Promise<ImportResult> {
     const parser = getParser(account);
-    const parsed = parser(text);
+    const parsed = parser({ text });
     const transactions: Transaction[] = [];
     let duplicates = 0;
 

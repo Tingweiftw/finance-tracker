@@ -178,7 +178,7 @@ export function processTransaction(
         accountId,
         type,
         category,
-        amount: Math.abs(amount) * (type === 'expense' ? -1 : 1),
+        amount, // Preserve the original sign from the parser
         description,
     };
 }

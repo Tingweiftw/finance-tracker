@@ -71,6 +71,68 @@ export async function extractTextFromPDF(file: File): Promise<string> {
     return fullText;
 }
 
+export interface PDFItem {
+    str: string;
+    x: number;
+    y: number;
+    // width might be useful but PDF.js items don't always give simple width. transform[0] is scaling.
+}
+
+export interface PDFLine {
+    y: number;
+    items: PDFItem[];
+    text: string; // convenience
+}
+
+export async function extractPDFLayout(file: File): Promise<PDFLine[]> {
+    const pdfjs = await loadPdfJs();
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+    const allLines: PDFLine[] = [];
+
+    for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        const items = content.items as any[];
+
+        // Group by Y
+        const yMap: Record<number, any[]> = {};
+        items.forEach((item: any) => {
+            // Round Y (PDF coords: 0,0 is bottom-left usually, or top-left depending on view? PDF.js is math coords usually)
+            // But we just need grouping.
+            const y = Math.round(item.transform[5]);
+            if (!yMap[y]) yMap[y] = [];
+            yMap[y].push(item);
+        });
+
+        // Parse into Lines
+        // Sort Y descending (Top to Bottom for standard reading)
+        const sortedY = Object.keys(yMap).map(Number).sort((a, b) => b - a);
+
+        sortedY.forEach(y => {
+            // Sort X ascending (Left to Right)
+            const lineItems = yMap[y].sort((a: any, b: any) => a.transform[4] - b.transform[4]);
+
+            const pdfItems: PDFItem[] = lineItems.map((item: any) => ({
+                str: item.str,
+                x: item.transform[4],
+                y: item.transform[5]
+            }));
+
+            const text = pdfItems.map(pi => pi.str).join('  ');
+
+            allLines.push({
+                y, // might need page offset if strict Y matters across pages, but usually not for column detection
+                items: pdfItems,
+                text
+            });
+        });
+    }
+
+    return allLines;
+}
+
 /**
  * Check if a file is a PDF
  */

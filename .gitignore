@@ -15,6 +15,7 @@ google-credentials.json
 .idea/
 *.swp
 *.swo
+examples/
 
 # OS
 .DS_Store

@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { ACCOUNT_TYPE_ICONS, type Account, type Transaction, type TransactionType, type Snapshot, TRANSACTION_TYPE_LABELS, type ImportRecord } from '@/models';
 import { validateFileType } from '@/services/ingestionService';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
-import { extractTextFromPDF, isPDFFile } from '@/utils/pdfExtractor';
+import { extractPDFLayout, isPDFFile } from '@/utils/pdfExtractor';
 import { getParser } from '@/services/parsers';
 import { processTransaction, CATEGORIES } from '@/services/classificationService';
 import { formatCurrency, formatDate } from '@/utils/date';
@@ -72,17 +72,20 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
 
             if (isPDFFile(file)) {
                 // PDF parsing flow
-                const pdfText = await extractTextFromPDF(file);
+                const pdfLayout = await extractPDFLayout(file);
+                // Reconstruct full text for fallback/logging
+                const pdfText = pdfLayout.map(l => l.text).join('\n');
+
                 // Select parser based on account
                 const parser = getParser(state.selectedAccount);
                 console.log('Import: Selected parser for', state.selectedAccount.name);
 
-                const parsedStatement = parser(pdfText);
+                const parsedStatement = parser({ text: pdfText, lines: pdfLayout });
 
                 // parseUOBOneStatement returns ParsedStatement
                 // BUT wait, in Step 527 lines 58-63 it was mapping it.
-                // In Step 494, parseUOBStatement signature was `(text: string, accountId?: string)`.
-                // and it returned `{ transactions: Transaction[], openingBalance?, closingBalance?, statementDate? }`.
+                // In Step 494, parseUOBStatement signature was `(text: string, accountId ?: string)`.
+                // and it returned `{ transactions: Transaction[], openingBalance ?, closingBalance ?, statementDate ? } `.
 
                 rows = parsedStatement.transactions.map(t => ({
                     date: t.date,
@@ -130,7 +133,7 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                 // The set doesn't update until we finish.
                 // We should probably track seen hashes in this batch too.
 
-                const uniqueId = `${state.selectedAccount.id}-${hash}-${Math.random().toString(36).substr(2, 5)}`;
+                const uniqueId = `${state.selectedAccount.id} -${hash} -${Math.random().toString(36).substr(2, 5)} `;
                 // ^ Simple unique ID generation combining account and hash + random
 
                 const transaction = processTransaction(
@@ -213,7 +216,6 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
             date: new Date().toISOString(),
             fileName: state.file.name,
             accountId: state.selectedAccount.id,
-            transactionCount: state.parsedTransactions.length,
         };
         console.log('Import: Created ImportRecord:', importRec);
 
@@ -252,7 +254,7 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                     <h1 className="page-title">Import</h1>
                     <p className="page-subtitle">
                         {state.step === 'select-account' && 'Select an account to import into'}
-                        {state.step === 'upload' && `Importing to ${state.selectedAccount?.name}`}
+                        {state.step === 'upload' && `Importing to ${state.selectedAccount?.name} `}
                         {state.step === 'preview' && 'Review transactions before importing'}
                         {state.step === 'complete' && 'Import complete!'}
                     </p>
@@ -349,7 +351,7 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                                                 <div>
                                                     <div className="font-medium">{rec.fileName}</div>
                                                     <div className="text-secondary text-xs">
-                                                        {formatDate(rec.date)} • {rec.transactionCount} txns
+                                                        {formatDate(rec.date)}
                                                     </div>
                                                 </div>
                                                 <button
@@ -446,7 +448,7 @@ export function Import({ accounts, existingHashes, onImport, onSnapshot, imports
                                                         {formatDate(t.date)}
                                                     </div>
                                                     <div
-                                                        className={`import-amount font-semibold ${t.amount < 0 ? 'text-expense' : 'text-income'}`}
+                                                        className={`import -amount font - semibold ${t.amount < 0 ? 'text-expense' : 'text-income'} `}
                                                     >
                                                         {t.amount < 0 ? '-' : '+'}{formatCurrency(Math.abs(t.amount))}
                                                     </div>

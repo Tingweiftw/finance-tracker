@@ -5,11 +5,19 @@ import { parseUOBLadyStatement } from './uobLadyParser';
 export { parseUOBOneStatement, parseUOBLadyStatement };
 export type { ParsedStatement };
 
+import type { PDFLine } from '@/utils/pdfExtractor';
+
+// Standard Input for all parsers
+export interface ParserInput {
+    text: string;
+    lines?: PDFLine[];
+}
+
 // Parser Registry definition
 interface ParserConfig {
     institution: string;
     accountName: string; // Exact match or strict identifier
-    parser: (text: string) => ParsedStatement;
+    parser: (input: ParserInput) => ParsedStatement;
 }
 
 const PARSER_REGISTRY: ParserConfig[] = [
@@ -25,7 +33,7 @@ const PARSER_REGISTRY: ParserConfig[] = [
     }
 ];
 
-export function getParser(account: Account): (text: string) => ParsedStatement {
+export function getParser(account: Account): (input: ParserInput) => ParsedStatement {
     const match = PARSER_REGISTRY.find(config =>
         config.institution === account.institution &&
         config.accountName === account.name

@@ -296,7 +296,6 @@ const parseImportRow = (row: string[]): ImportRecord => ({
     date: row[1],
     accountId: row[2],
     fileName: row[3],
-    transactionCount: parseInt(row[4] || '0', 10),
 });
 
 export async function getImports(): Promise<ImportRecord[]> {
@@ -310,7 +309,6 @@ export async function addImport(record: ImportRecord): Promise<boolean> {
             record.date,
             record.accountId,
             record.fileName,
-            (record.transactionCount || 0).toString()
         ]
     ]);
 }
@@ -368,6 +366,7 @@ async function overwriteSheet(sheetName: string, transactions: Transaction[]): P
             t.amount,
             t.description,
             t.tag || '',
+            t.importId || '',
         ]);
 
         const writeUrl = `${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z?valueInputOption=USER_ENTERED`;
@@ -429,7 +428,6 @@ export async function deleteImportRecord(importId: string): Promise<boolean> {
             r.date,
             r.accountId,
             r.fileName,
-            (r.transactionCount || 0).toString()
         ]);
 
         const response = await fetch(`${SHEETS_API_BASE}/${SHEETS_CONFIG.spreadsheetId}/values/${sheetName}!A2:Z?valueInputOption=USER_ENTERED`, {

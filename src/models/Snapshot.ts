@@ -10,5 +10,4 @@ export interface ImportRecord {
     date: string;
     fileName: string;
     accountId: string;
-    transactionCount: number;
 }

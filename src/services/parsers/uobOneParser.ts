@@ -18,7 +18,177 @@ export interface ParsedStatement {
     }[];
 }
 
-export function parseUOBOneStatement(text: string): ParsedStatement {
+import type { ParserInput } from './index';
+import type { PDFLine, PDFItem } from '@/utils/pdfExtractor';
+
+export function parseUOBOneStatement(input: ParserInput): ParsedStatement {
+    if (input.lines && input.lines.length > 0) {
+        return parseWithLayout(input.lines, input.text);
+    }
+    return parseTextOnly(input.text);
+}
+
+function parseWithLayout(lines: PDFLine[], fullText: string): ParsedStatement {
+    // 1. Identify Layout (Withdrawal vs Deposit columns)
+    let withdrawalX = 0;
+    let depositX = 0;
+    let balanceX = 0;
+
+    // Scan for header line
+    for (const line of lines) {
+        const text = line.text;
+        if (text.includes('Withdrawal') && text.includes('Deposit')) {
+            // Found header line. Identify X positions.
+            const wItem = line.items.find(i => i.str.includes('Withdrawal'));
+            const dItem = line.items.find(i => i.str.includes('Deposit'));
+            const bItem = line.items.find(i => i.str.includes('Balance'));
+
+            if (wItem) withdrawalX = wItem.x;
+            if (dItem) depositX = dItem.x;
+            if (bItem) balanceX = bItem.x;
+            break;
+        }
+    }
+
+    if (withdrawalX === 0 || depositX === 0) {
+        console.warn('UOB Parser: Could not detect column layout, using default positions');
+        // Default positions based on typical UOB statement layout
+        withdrawalX = 344;
+        depositX = 435;
+        balanceX = 517;
+    }
+
+    // Centroids or ranges? Just usage nearest neighbor strategy.
+
+    // Common Logic extraction (make this DRY later if needed)
+    const periodMatch = fullText.match(/Period:\s*(\d{2}\s+\w{3}\s+\d{4})\s+to\s+(\d{2}\s+\w{3}\s+\d{4})/);
+    if (!periodMatch) throw new Error('Could not find statement period');
+    const periodEnd = parseUOBDate(periodMatch[2]);
+    const currentYear = new Date(periodEnd).getFullYear();
+    const accountMatch = fullText.match(/One Account\s+([\d-]+)/);
+    const accountNumber = accountMatch ? accountMatch[1] : '';
+
+    const transactions: ParsedStatement['transactions'] = [];
+    let closingBalance = 0;
+
+    // Transaction Parsing Loop
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const text = line.text.trim();
+
+        // 1. Check for Date Start
+        const dateMatch = text.match(/^(\d{2}\s+\w{3})\s+/);
+        if (!dateMatch) continue;
+
+        const dateStr = dateMatch[1];
+
+        // 2. Identify Numbers in this line (or sometimes mixed in description?)
+        // UOB One usually has Amount and Balance at the end of the line.
+        // Item filtering:
+        const numberItems = line.items.filter(item => /^-?[\d,]+\.\d{2}$/.test(item.str.trim()));
+
+        if (numberItems.length === 0) continue;
+
+        // 3. Logic: Last item is usually Balance.
+        // Previous items are Withdrawal or Deposit.
+
+        let balance = 0;
+        let amount = 0;
+        let descEndIndex = line.items.length; // Index where description likely ends
+
+        // Assume last number is Balance
+        // Check if last item is indeed in the "Balance" zone?
+        const lastNum = numberItems[numberItems.length - 1];
+        if (Math.abs(lastNum.x - balanceX) < 50 || numberItems.length >= 2) {
+            // It's likely the balance
+            balance = parseFloat(lastNum.str.replace(/,/g, ''));
+            descEndIndex = line.items.indexOf(lastNum);
+        }
+
+        // Look for Transaction Amount
+        // It should be one of the numberItems (excluding the balance we just found, if we found it)
+        const amountItems = numberItems.filter(n => n !== lastNum);
+        // Note: if there was only 1 number, and it was balance, then amount is missing (impossible?) or purely description?
+        // Actually, if only 1 number exists, it might be Amount OR Balance.
+        // Use X Coord!
+
+        let foundAmountItem: PDFItem | null = null;
+
+        if (amountItems.length > 0) {
+            foundAmountItem = amountItems[amountItems.length - 1];
+        } else if (Math.abs(lastNum.x - balanceX) > 50) {
+            // The "last number" is NOT near balance column. It must be the amount!
+            // And Balance is missing on this line? (Possible if wrapped? Unlikely for UOB One)
+            // Or maybe Balance is just far off?
+            // Let's assume input text structure is preserved.
+            foundAmountItem = lastNum;
+        }
+
+        if (foundAmountItem) {
+            const rawAmount = parseFloat(foundAmountItem.str.replace(/,/g, ''));
+            // Determine sign based on X
+            const distToWithdrawal = Math.abs(foundAmountItem.x - withdrawalX);
+            const distToDeposit = Math.abs(foundAmountItem.x - depositX);
+
+            if (distToWithdrawal < distToDeposit) {
+                amount = -Math.abs(rawAmount); // Force negative
+            } else {
+                amount = Math.abs(rawAmount); // Force positive
+            }
+
+            // Adjust descEndIndex to exclude this amount item
+            const idx = line.items.indexOf(foundAmountItem);
+            if (idx < descEndIndex) descEndIndex = idx;
+        }
+
+        closingBalance = balance || closingBalance; // Update running closing balance
+
+        // 4. Extract Description
+        // Join all items before the first number (amount or balance)
+        // Also handle multi-line descriptions (look ahead)
+        // For simplicity, just take everything before the numbers in the current line
+        const descItems = line.items.slice(0, descEndIndex);
+        // Exclude the date item(s) from description ideally?
+        // Date is at the start.
+        // descItems[0] might be "01 Sep".
+        let description = descItems.map(i => i.str).join(' ');
+        description = description.replace(dateStr, '').trim();
+
+        // Look ahead for continuation lines (lines with NO date, NO numbers? or just indented?)
+        let j = i + 1;
+        while (j < lines.length) {
+            const nextLine = lines[j];
+            const nextText = nextLine.text.trim();
+            // Stop conditions
+            if (/^\d{2}\s+\w{3}/.test(nextText) || nextText.includes('BALANCE B/F') || nextText.includes('End of Transaction')) break;
+            if (isFooterLine(nextText)) { j++; continue; }
+
+            // Append content
+            description += ' | ' + nextLine.text.trim();
+            j++;
+        }
+        i = j - 1;
+
+        transactions.push({
+            date: parseStatementDate(dateStr, currentYear),
+            description,
+            amount,
+            balance
+        });
+    }
+
+    return {
+        openingBalance: 0, // Not strictly parsed yet
+        closingBalance,
+        periodStart: periodMatch[1],
+        periodEnd: periodMatch[2],
+        currency: 'SGD',
+        accountNumber,
+        transactions
+    };
+}
+
+function parseTextOnly(text: string): ParsedStatement {
     // Extract statement period
     const periodMatch = text.match(/Period:\s*(\d{2}\s+\w{3}\s+\d{4})\s+to\s+(\d{2}\s+\w{3}\s+\d{4})/);
     if (!periodMatch) {
@@ -142,7 +312,7 @@ export function parseUOBOneStatement(text: string): ParsedStatement {
                 }
 
                 transactions.push({
-                    date: formatDate(dateStr, currentYear),
+                    date: parseStatementDate(dateStr, currentYear),
                     description: description.trim(),
                     amount,
                     balance
@@ -177,7 +347,7 @@ export function parseUOBOneStatement(text: string): ParsedStatement {
                     }
 
                     transactions.push({
-                        date: formatDate(dateStr, currentYear),
+                        date: parseStatementDate(dateStr, currentYear),
                         description,
                         amount,
                         balance
@@ -224,7 +394,7 @@ function parseUOBDate(dateStr: string): string {
     return `${year}-${month}-${day}`;
 }
 
-function formatDate(dateStr: string, year: number): string {
+function parseStatementDate(dateStr: string, year: number): string {
     // Input: "01 Dec"
     const months: { [key: string]: string } = {
         'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04',
