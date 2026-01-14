@@ -2,47 +2,36 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { useState, useCallback, useEffect } from 'react';
 import { Dashboard, Import, NetWorth, Transactions, Settings } from '@/pages';
 import type { Account, Transaction, Snapshot } from '@/models';
+import { getAccounts, getTransactions, getSnapshots, addTransactions } from '@/services/sheetsService';
 
-// Mock data for development
-// No owners needed for single-user mode
-
-const MOCK_ACCOUNTS: Account[] = [
-    { id: 'acc-1', productId: 'uob-one-fx', institution: 'UOB', name: 'UOB One (with FX+)', type: 'bank' },
-    { id: 'acc-2', productId: 'uob-ladys', institution: 'UOB', name: 'UOB Lady\'s Savings', type: 'hysa' },
-    { id: 'acc-3', institution: 'DBS', name: 'Multiplier', type: 'bank' },
-    { id: 'acc-4', institution: 'Syfe', name: 'REIT+', type: 'brokerage' },
-    { id: 'acc-5', institution: 'StashAway', name: 'Portfolio', type: 'brokerage' },
-];
-
-const MOCK_TRANSACTIONS: Transaction[] = [
-    { id: 't-1', date: '2026-01-05', accountId: 'acc-1', type: 'expense', category: 'Food & Dining', amount: -85.50, description: 'Dinner at Restaurant' },
-    { id: 't-2', date: '2026-01-04', accountId: 'acc-3', type: 'expense', category: 'Online Shopping', amount: -250.00, description: 'Amazon Order' },
-    { id: 't-3', date: '2026-01-03', accountId: 'acc-1', type: 'income', category: 'Salary', amount: 8500.00, description: 'Monthly Salary' },
-    { id: 't-4', date: '2026-01-02', accountId: 'acc-4', type: 'investment', category: 'Dividend', amount: 125.40, description: 'REIT Dividend' },
-    { id: 't-5', date: '2025-12-28', accountId: 'acc-2', type: 'expense', category: 'Healthcare', amount: -1200.00, description: 'Medical Check-up', tag: 'Medical' },
-    { id: 't-6', date: '2025-12-25', accountId: 'acc-5', type: 'investment', category: 'Interest', amount: 89.20, description: 'Portfolio Interest' },
-];
-
-const MOCK_SNAPSHOTS: Snapshot[] = [
-    // December 2025
-    // December 2025
-    { date: '2025-12-01', accountId: 'acc-1', balance: 45000 },
-    { date: '2025-12-01', accountId: 'acc-3', balance: 28000 },
-    { date: '2025-12-01', accountId: 'acc-4', balance: 32000 },
-    { date: '2025-12-01', accountId: 'acc-5', balance: 15000 },
-    // January 2026
-    { date: '2026-01-01', accountId: 'acc-1', balance: 48500 },
-    { date: '2026-01-01', accountId: 'acc-3', balance: 29500 },
-    { date: '2026-01-01', accountId: 'acc-4', balance: 33200 },
-    { date: '2026-01-01', accountId: 'acc-5', balance: 15800 },
-];
+// Mock data removed
 
 function App() {
     // State management
-    const [accounts, setAccounts] = useState<Account[]>(MOCK_ACCOUNTS);
-    const [transactions, setTransactions] = useState<Transaction[]>(MOCK_TRANSACTIONS);
-    const [snapshots, setSnapshots] = useState<Snapshot[]>(MOCK_SNAPSHOTS);
+    const [accounts, setAccounts] = useState<Account[]>([]);
+    const [transactions, setTransactions] = useState<Transaction[]>([]);
+    const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
     const [existingHashes] = useState<Set<string>>(new Set());
+
+    // Load data from Sheets on mount
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [loadedAccounts, loadedTransactions, loadedSnapshots] = await Promise.all([
+                    getAccounts(),
+                    getTransactions(),
+                    getSnapshots()
+                ]);
+
+                if (loadedAccounts) setAccounts(loadedAccounts);
+                if (loadedTransactions) setTransactions(loadedTransactions);
+                if (loadedSnapshots) setSnapshots(loadedSnapshots);
+            } catch (error) {
+                console.error('Failed to load data:', error);
+            }
+        };
+        loadData();
+    }, []);
 
     // Calculate last import dates
     const [lastImportDates, setLastImportDates] = useState<Map<string, string>>(new Map());
@@ -64,8 +53,17 @@ function App() {
         setAccounts((prev) => [...prev, account]);
     }, []);
 
-    const handleImportTransactions = useCallback((newTransactions: Transaction[]) => {
+    const handleImportTransactions = useCallback(async (newTransactions: Transaction[]) => {
         setTransactions((prev) => [...prev, ...newTransactions]);
+
+        // Persist to Google Sheets
+        console.log('App: Saving imported transactions to Sheets...', newTransactions.length);
+        const success = await addTransactions(newTransactions);
+        if (success) {
+            console.log('App: Successfully saved transactions to Sheets');
+        } else {
+            console.error('App: Failed to save transactions to Sheets');
+        }
     }, []);
 
     const handleUpdateTag = useCallback((transactionId: string, tag: string) => {

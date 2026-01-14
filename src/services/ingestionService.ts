@@ -1,6 +1,7 @@
-import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 import { processTransaction } from './classificationService';
+import { parseUOBStatement } from './parsers/uobStatementParser';
 import type { Transaction, Account } from '@/models';
+import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 
 interface ImportResult {
     transactions: Transaction[];
@@ -23,7 +24,6 @@ export async function importCSV(
     let duplicates = 0;
 
     for (const row of rows) {
-        // Generate hash for duplicate detection
         const hash = generateTransactionHash(row.date, row.description, row.amount);
 
         if (existingHashes.has(hash)) {
@@ -31,7 +31,6 @@ export async function importCSV(
             continue;
         }
 
-        // Process and classify transaction
         const transaction = processTransaction(
             `${account.id}-${hash}`,
             row.date,
@@ -46,6 +45,43 @@ export async function importCSV(
     }
 
     return { transactions, duplicates, errors };
+}
+
+/**
+ * Import transactions from a UOB PDF statement text
+ */
+export async function importUOBStatement(
+    text: string,
+    account: Account,
+    existingHashes: Set<string>
+): Promise<ImportResult> {
+    const parsed = parseUOBStatement(text);
+    const transactions: Transaction[] = [];
+    let duplicates = 0;
+
+    for (const t of parsed.transactions) {
+        // Use the same hashing logic as CSV for consistency
+        const hash = generateTransactionHash(t.date, t.description, t.amount);
+
+        if (existingHashes.has(hash)) {
+            duplicates++;
+            continue;
+        }
+
+        const transaction = processTransaction(
+            `${account.id}-${hash}`,
+            t.date,
+            t.description,
+            t.amount,
+            account.id,
+            account.type
+        );
+
+        transactions.push(transaction);
+        existingHashes.add(hash);
+    }
+
+    return { transactions, duplicates, errors: [] };
 }
 
 /**
