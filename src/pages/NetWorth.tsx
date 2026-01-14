@@ -1,11 +1,12 @@
 import { NetWorthChart } from '@/components';
-import type { Snapshot } from '@/models';
+import type { Snapshot, Account } from '@/models';
 
 interface NetWorthPageProps {
     snapshots: Snapshot[];
+    accounts: Account[];
 }
 
-export function NetWorth({ snapshots }: NetWorthPageProps) {
+export function NetWorth({ snapshots, accounts }: NetWorthPageProps) {
 
     return (
         <div className="page">
@@ -19,6 +20,7 @@ export function NetWorth({ snapshots }: NetWorthPageProps) {
                 {/* Chart */}
                 <NetWorthChart
                     snapshots={snapshots}
+                    accounts={accounts}
                 />
 
                 {/* Summary stats */}
@@ -27,6 +29,7 @@ export function NetWorth({ snapshots }: NetWorthPageProps) {
                         <div className="card-title mb-md">Summary</div>
                         <NetWorthSummary
                             snapshots={snapshots}
+                            accounts={accounts}
                         />
                     </div>
                 )}
@@ -35,36 +38,43 @@ export function NetWorth({ snapshots }: NetWorthPageProps) {
     );
 }
 
-interface NetWorthSummaryProps {
-    snapshots: Snapshot[];
-}
+function NetWorthSummary({ snapshots, accounts }: { snapshots: Snapshot[], accounts: Account[] }) {
+    // Helper to get account type
+    const accountTypeMap = new Map(accounts.map(a => [a.id, a.type]));
 
-function NetWorthSummary({ snapshots }: NetWorthSummaryProps) {
-    // Group by month and get latest balance per account per month
     const monthlyTotals = new Map<string, number>();
-    const accountMonthBalances = new Map<string, Map<string, number>>();
 
-    for (const snapshot of snapshots) {
-        const month = snapshot.date.substring(0, 7);
-        const key = `${snapshot.accountId}-${month}`;
+    // 1. Organize snapshots by Month -> AccountId -> Latest Snapshot
+    const latestSnapshotsPerMonth = new Map<string, Map<string, Snapshot>>();
 
-        if (!accountMonthBalances.has(key)) {
-            accountMonthBalances.set(key, new Map());
+    for (const s of snapshots) {
+        const month = s.date.substring(0, 7);
+        if (!latestSnapshotsPerMonth.has(month)) {
+            latestSnapshotsPerMonth.set(month, new Map());
         }
+        const accountMap = latestSnapshotsPerMonth.get(month)!;
 
-        const accountMap = accountMonthBalances.get(key)!;
-        const existing = accountMap.get(snapshot.date);
-        if (!existing || snapshot.date > existing.toString()) {
-            accountMap.set(month, snapshot.balance);
+        const existing = accountMap.get(s.accountId);
+        if (!existing || s.date > existing.date) {
+            accountMap.set(s.accountId, s);
         }
     }
 
-    // Calculate monthly totals
-    for (const [key, balanceMap] of accountMonthBalances) {
-        const month = key.split('-').slice(-2).join('-');
-        for (const [, balance] of balanceMap) {
-            monthlyTotals.set(month, (monthlyTotals.get(month) || 0) + balance);
+    // 2. Sum up totals
+    for (const [month, accountMap] of latestSnapshotsPerMonth) {
+        let total = 0;
+        for (const [accountId, snapshot] of accountMap) {
+            const type = accountTypeMap.get(accountId);
+            let balance = snapshot.balance;
+
+            // If it's a credit card, treat positive balance as liability (negative net worth)
+            if (type === 'credit' && balance > 0) {
+                balance = -balance;
+            }
+
+            total += balance;
         }
+        monthlyTotals.set(month, total);
     }
 
     const months = Array.from(monthlyTotals.keys()).sort();

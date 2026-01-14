@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { ACCOUNT_TYPE_ICONS, type Account, type Transaction, type TransactionType, TRANSACTION_TYPE_LABELS } from '@/models';
+import { ACCOUNT_TYPE_ICONS, type Account, type Transaction, type TransactionType, type Snapshot, TRANSACTION_TYPE_LABELS } from '@/models';
 import { validateFileType } from '@/services/ingestionService';
 import { parseCSV, generateTransactionHash } from '@/utils/csvParser';
 import { extractTextFromPDF, isPDFFile } from '@/utils/pdfExtractor';
@@ -11,6 +11,7 @@ interface ImportPageProps {
     accounts: Account[];
     existingHashes: Set<string>;
     onImport: (transactions: Transaction[]) => void;
+    onSnapshot: (snapshot: Snapshot) => void;
 }
 
 type ImportStep = 'select-account' | 'upload' | 'preview' | 'complete';
@@ -27,7 +28,7 @@ interface ImportState {
     closingBalance: number | null;
 }
 
-export function Import({ accounts, existingHashes, onImport }: ImportPageProps) {
+export function Import({ accounts, existingHashes, onImport, onSnapshot }: ImportPageProps) {
     const [state, setState] = useState<ImportState>({
         step: 'select-account',
         selectedAccount: null,
@@ -155,8 +156,25 @@ export function Import({ accounts, existingHashes, onImport }: ImportPageProps) 
         }));
     };
 
-    const handleConfirmImport = () => {
+    const handleConfirmImport = async () => {
         onImport(state.parsedTransactions);
+
+        // If we parsed a closing balance, create a snapshot
+        if (state.selectedAccount && state.closingBalance !== null && state.parsedTransactions.length > 0) {
+            // Use the latest transaction date as the snapshot date
+            const sortedDates = state.parsedTransactions.map(t => t.date).sort();
+            const latestDate = sortedDates[sortedDates.length - 1];
+
+            const snapshot: Snapshot = {
+                date: latestDate,
+                accountId: state.selectedAccount.id,
+                balance: state.closingBalance
+            };
+
+            console.log('Import: Saving snapshot...', snapshot);
+            onSnapshot(snapshot);
+        }
+
         setState((prev) => ({
             ...prev,
             step: 'complete',

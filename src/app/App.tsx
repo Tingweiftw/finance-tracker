@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom';
 import { useState, useCallback, useEffect } from 'react';
 import { Dashboard, Import, NetWorth, Transactions, Settings } from '@/pages';
 import type { Account, Transaction, Snapshot } from '@/models';
-import { getAccounts, getTransactions, getSnapshots, addTransactions } from '@/services/sheetsService';
+import { getAccounts, getTransactions, getSnapshots, addTransactions, addAccount, addSnapshot } from '@/services/sheetsService';
 
 // Mock data removed
 
@@ -49,8 +49,17 @@ function App() {
 
     // Handlers
 
-    const handleAddAccount = useCallback((account: Account) => {
+    const handleAddAccount = useCallback(async (account: Account) => {
         setAccounts((prev) => [...prev, account]);
+
+        // Persist to Google Sheets
+        console.log('App: Saving new account to Sheets...', account.name);
+        const success = await addAccount(account);
+        if (success) {
+            console.log('App: Successfully saved account to Sheets');
+        } else {
+            console.error('App: Failed to save account to Sheets');
+        }
     }, []);
 
     const handleImportTransactions = useCallback(async (newTransactions: Transaction[]) => {
@@ -70,6 +79,19 @@ function App() {
         setTransactions((prev) =>
             prev.map((t) => (t.id === transactionId ? { ...t, tag } : t))
         );
+    }, []);
+
+    const handleSnapshot = useCallback(async (snapshot: Snapshot) => {
+        setSnapshots((prev) => [...prev, snapshot]);
+
+        // Persist to Google Sheets
+        console.log('App: Saving snapshot to Sheets...', snapshot);
+        const success = await addSnapshot(snapshot);
+        if (success) {
+            console.log('App: Successfully saved snapshot to Sheets');
+        } else {
+            console.error('App: Failed to save snapshot to Sheets');
+        }
     }, []);
 
     return (
@@ -101,12 +123,13 @@ function App() {
                                 accounts={accounts}
                                 existingHashes={existingHashes}
                                 onImport={handleImportTransactions}
+                                onSnapshot={handleSnapshot}
                             />
                         }
                     />
                     <Route
                         path="/net-worth"
-                        element={<NetWorth snapshots={snapshots} />}
+                        element={<NetWorth snapshots={snapshots} accounts={accounts} />}
                     />
                     <Route
                         path="/transactions"
